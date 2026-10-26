@@ -90,6 +90,8 @@ src/
 ## 6. Развёртывание
 
 - БД — PostgreSQL (Neon, pooled-соединение, `sslmode=require`); `DATABASE_URL` и `AUTH_SECRET` — переменные окружения.
-- Vercel: `vercel-build` = `prisma generate → prisma db push → prisma/bootstrap.ts → next build`;
+- Прод: Render Web Service — Build `npm install && npm run vercel-build`, Start `npm run start`
+  (демо: https://exportexpert-fms.onrender.com). Альтернатива — Vercel с тем же скриптом.
+- `vercel-build` = `prisma generate → prisma db push → prisma/bootstrap.ts → next build`;
   bootstrap заливает демо-данные только в пустую базу.
-- Подробная инструкция — README, раздел «Деплой на Vercel».
+- Подробные инструкции — README, разделы «Деплой на Render» и «Деплой на Vercel».
