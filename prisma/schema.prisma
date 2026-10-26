@@ -1,0 +1,158 @@
+// FMS «Экспортэксперт» — схема данных.
+// SQLite для локального запуска. Для PostgreSQL достаточно сменить provider и DATABASE_URL.
+// Перечисления хранятся строками; допустимые значения и подписи — src/lib/domain/constants.ts
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  role         String   @default("ADMIN") // ADMIN | MANAGER | INSPECTOR
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Container {
+  id String @id @default(cuid())
+
+  // 1. Паспорт и идентификация
+  bicCode          String @unique // ISO 6346 без разделителей: EXEX4029183
+  sizeType         String // 20DC | 20HQ | 40DC | 40HC | 40HR | 20OT | 40FR
+  isoCode          String // 22G1, 45G1, 45R1 …
+  manufactureYear  Int
+  colorRal         String
+  manufacturer     String
+  tareWeightKg     Int
+  maxPayloadKg     Int
+  maxGrossWeightKg Int
+
+  // 2. Техническое состояние и комплаенс
+  conditionGrade String // IICL6 | CW | WWT | DAMAGED
+  techStatus     String // SOUND | DAMAGED | IN_REPAIR | HOLD
+  cscPlateExpiry DateTime // КБК / дата следующего освидетельствования (ACEP / PES)
+  eorAmountUsd   Float? // Estimate of Repair
+
+  // 3. Дислокация и операционный статус
+  operationalStatus    String // AVAILABLE | ONE_WAY | LONG_TERM_LEASE | IN_TRANSIT | MAINTENANCE
+  currentLocode        String
+  currentTerminal      String
+  storageStartDate     DateTime?
+  storageRatePerDayUsd Float?
+
+  // 4. Финансы и экономика единицы
+  purchaseDate        DateTime
+  purchasePriceUsd    Float
+  currentBookValueUsd Float
+  totalRevenueUsd     Float    @default(0)
+  totalRepairCostUsd  Float    @default(0)
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events      ContainerEvent[]
+  oneWayTrips OneWayTrip[]
+  leaseItems  LeaseItem[]
+
+  @@index([operationalStatus])
+  @@index([currentLocode])
+}
+
+// 5. История операций (Audit & Movement Log)
+model ContainerEvent {
+  id          String    @id @default(cuid())
+  containerId String
+  container   Container @relation(fields: [containerId], references: [id], onDelete: Cascade)
+  type        String // GATE_IN | GATE_OUT | ONE_WAY_OUT | ONE_WAY_IN | LEASE_ON_HIRE | LEASE_OFF_HIRE | INSPECTION | REPAIR_START | REPAIR_DONE | STATUS_CHANGE | PURCHASE | CSC_RENEWAL | LEASE_EXTENDED
+  occurredAt  DateTime
+  locode      String?
+  terminal    String?
+  description String
+  amountUsd   Float?
+  actor       String?
+  createdAt   DateTime  @default(now())
+
+  @@index([containerId, occurredAt])
+}
+
+model OneWayTrip {
+  id          String    @id @default(cuid())
+  containerId String
+  container   Container @relation(fields: [containerId], references: [id], onDelete: Cascade)
+
+  counterpartyName    String
+  counterpartyInn     String?
+  counterpartyContact String?
+  bookingRef          String
+
+  pickupLocode    String
+  pickupTerminal  String
+  dropoffLocode   String
+  dropoffTerminal String
+
+  handoverDate     DateTime // Gate-Out
+  freeDays         Int
+  deadlineDate     DateTime // handoverDate + freeDays
+  actualReturnDate DateTime? // Gate-In
+
+  feeUsd                 Float @default(0)
+  detentionRatePerDayUsd Float
+
+  status          String // ACTIVE | COMPLETED | DISPUTE  (OVERDUE вычисляется: ACTIVE и дедлайн прошёл)
+  returnCondition String? // SOUND | DAMAGED
+  returnEorUsd    Float?
+  notes           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+model LeaseContract {
+  id                   String   @id @default(cuid())
+  contractNumber       String   @unique
+  lesseeName           String
+  lesseeInn            String?
+  contactPerson        String
+  contactPhone         String?
+  contactEmail         String?
+  startDate            DateTime // On-Hire
+  endDate              DateTime // плановый Off-Hire
+  autoRenewal          Boolean  @default(false)
+  dailyRateUsd         Float // Per Diem за единицу
+  currency             String   @default("USD")
+  depositUsd           Float    @default(0)
+  paymentStatus        String // PAID | PENDING | OVERDUE (текущий месяц)
+  allowedReturnLocodes String // CSV: "RUVVO,RUNVR"
+  onHireSurvey         String   @default("SIGNED") // PENDING | SIGNED
+  offHireSurvey        String   @default("NOT_STARTED") // NOT_STARTED | PENDING | SIGNED
+  status               String   @default("ACTIVE") // ACTIVE | COMPLETED
+  notes                String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  items LeaseItem[]
+}
+
+model LeaseItem {
+  id           String        @id @default(cuid())
+  leaseId      String
+  lease        LeaseContract @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  containerId  String
+  container    Container     @relation(fields: [containerId], references: [id], onDelete: Cascade)
+  onHireDate   DateTime
+  offHireDate  DateTime?
+  returnLocode String?
+
+  @@index([leaseId])
+  @@index([containerId])
+}

@@ -1,0 +1,26 @@
+# Зависимости и сборка
+node_modules
+.next
+out
+coverage
+*.tsbuildinfo
+next-env.d.ts
+
+# Секреты и локальное окружение (шаблон — .env.example)
+.env
+.env*.local
+
+# Локальная база SQLite (создаётся командой npm run setup)
+prisma/*.db
+prisma/*.db-journal
+
+# Логи, служебные файлы ОС и IDE
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+
+# Локальные настройки Claude Code (превью dev-сервера)
+.claude/
