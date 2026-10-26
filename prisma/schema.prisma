@@ -1,5 +1,6 @@
 // FMS «Экспортэксперт» — схема данных.
-// SQLite для локального запуска. Для PostgreSQL достаточно сменить provider и DATABASE_URL.
+// Боевая БД — PostgreSQL (Neon). Для полностью локального запуска можно вернуть provider = "sqlite"
+// и DATABASE_URL="file:./dev.db" — схема совместима с обоими провайдерами.
 // Перечисления хранятся строками; допустимые значения и подписи — src/lib/domain/constants.ts
 
 generator client {
@@ -7,7 +8,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

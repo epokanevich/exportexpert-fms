@@ -9,7 +9,7 @@ Fleet Management System для парка собственных контейн�
 |---|---|---|
 | Фреймворк | Next.js 16 (App Router), React 19, TypeScript 5 (strict) | Server Components + Server Actions = CRUD без отдельного API |
 | UI | Tailwind CSS 4, компоненты в стиле shadcn/ui (свои, в `src/components/ui`), Lucide, Recharts | Без тяжёлых UI-китов, полный контроль над адаптивом |
-| Данные | Prisma 6 + SQLite (`prisma/dev.db`) | Мгновенный локальный запуск; переход на PostgreSQL = смена `provider` и `DATABASE_URL` |
+| Данные | Prisma 6 + PostgreSQL (Neon) | Serverless-friendly облачный Postgres; схема совместима и с SQLite для офлайн-демо |
 | Валидация | Zod 4 на границе (Server Actions) | Ничего не пишется в БД без схемы |
 | Авторизация | JWT (HS256, `jose`) в httpOnly-cookie + `bcryptjs` | Проверка в `proxy.ts` (edge-guard) и повторно в каждом Server Action |
 | Тесты | Vitest — доменная логика (ISO 6346, детеншн, начисления аренды, KPI) | Самые дорогие ошибки — в расчётах |
@@ -57,7 +57,7 @@ src/
 - **LeaseContract** + **LeaseItem** — договор аренды и привязка контейнеров с датами On-Hire/Off-Hire
   по каждой единице (частичный возврат пакета, история аренды по контейнеру).
 
-Перечисления хранятся строками (SQLite) и типизируются TS-юнионами в `lib/domain/constants.ts`.
+Перечисления хранятся строками (совместимо с PostgreSQL и SQLite) и типизируются TS-юнионами в `lib/domain/constants.ts`.
 `allowedReturnLocodes` — CSV-строка (в PostgreSQL можно заменить на `String[]`).
 
 ### Производные статусы (не хранятся, считаются на лету)
@@ -87,8 +87,9 @@ src/
   Sheet-панели выезжают снизу, тап-зоны ≥ 44px.
 - Номера контейнеров — моноширинный шрифт, формат `EXEX 402918-3`; поиск по подстроке игнорирует пробелы/дефисы.
 
-## 6. Переход на PostgreSQL
+## 6. Развёртывание
 
-1. `prisma/schema.prisma`: `provider = "postgresql"`.
-2. `DATABASE_URL=postgresql://…`
-3. `npx prisma migrate dev --name init && npm run db:seed`.
+- БД — PostgreSQL (Neon, pooled-соединение, `sslmode=require`); `DATABASE_URL` и `AUTH_SECRET` — переменные окружения.
+- Vercel: `vercel-build` = `prisma generate → prisma db push → prisma/bootstrap.ts → next build`;
+  bootstrap заливает демо-данные только в пустую базу.
+- Подробная инструкция — README, раздел «Деплой на Vercel».

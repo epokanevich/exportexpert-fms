@@ -3,6 +3,7 @@
  * Детерминирован (фиксированный seed PRNG), все даты — относительно `now`.
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { addDays, addMonths, startOfDayUtc } from "@/lib/dates";
 import { DEFAULT_ISO_CODE, DEFAULT_WEIGHTS, locodeCity, terminalsOf } from "@/lib/domain/constants";
@@ -240,7 +241,7 @@ function buildHistory(spec: ContainerSpec, purchaseDate: Date, firstActivity: Da
 }
 
 interface ContainerBuild {
-  data: Prisma.ContainerCreateInput;
+  data: Omit<Prisma.ContainerCreateManyInput, "id">;
   events: EventDraft[];
   trips: Omit<Prisma.OneWayTripCreateManyInput, "containerId">[];
 }
@@ -386,17 +387,6 @@ async function clearDomainData(tx: Tx): Promise<void> {
   await tx.container.deleteMany();
 }
 
-async function upsertUsers(tx: Tx): Promise<void> {
-  for (const user of DEMO_USERS) {
-    const passwordHash = await bcrypt.hash(user.password, 10);
-    await tx.user.upsert({
-      where: { email: user.email },
-      update: { name: user.name, role: user.role, passwordHash },
-      create: { email: user.email, name: user.name, role: user.role, passwordHash },
-    });
-  }
-}
-
 export async function seedDatabase(prisma: PrismaClient, now: Date = new Date()): Promise<SeedSummary> {
   const today = startOfDayUtc(now);
   const ctx: BuildContext = {
@@ -406,89 +396,103 @@ export async function seedDatabase(prisma: PrismaClient, now: Date = new Date())
   };
   const builds = CONTAINERS.map((spec) => ({ spec, build: buildContainer(spec, ctx) }));
 
+  // Все строки собираются в памяти с заранее выданными id и пишутся пакетно (createMany):
+  // ~12 запросов вместо ~120 — критично для облачной БД и serverless-функции «Сбросить демо-данные».
+  const idByKey = new Map<string, string>(builds.map(({ spec }) => [spec.key, randomUUID()]));
+  const idOf = (key: string, context: string): string => {
+    const id = idByKey.get(key);
+    if (!id) throw new Error(`Не найден контейнер ${key} (${context})`);
+    return id;
+  };
+
+  const containers = builds.map(({ spec, build }) => ({ id: idOf(spec.key, "контейнер"), ...build.data }));
+  const events = builds.flatMap(({ spec, build }) =>
+    build.events
+      .filter((e) => new Date(e.occurredAt).getTime() <= now.getTime())
+      .map((e) => ({ ...e, containerId: idOf(spec.key, "событие") })),
+  );
+  const historyTrips = builds.flatMap(({ spec, build }) => build.trips.map((t) => ({ ...t, containerId: idOf(spec.key, "история One-Way") })));
+  const activeTrips: Prisma.OneWayTripCreateManyInput[] = ACTIVE_TRIPS.map((trip) => {
+    const spec = CONTAINERS.find((c) => c.key === trip.containerKey);
+    if (!spec) throw new Error(`Не найден контейнер ${trip.containerKey} для One-Way`);
+    const handover = addDays(today, -spec.sinceDays);
+    return {
+      containerId: idOf(trip.containerKey, "One-Way"),
+      counterpartyName: trip.counterparty,
+      counterpartyInn: trip.inn,
+      counterpartyContact: trip.contact,
+      bookingRef: trip.bookingRef,
+      pickupLocode: spec.locode,
+      pickupTerminal: spec.terminal,
+      dropoffLocode: trip.dropoff[0],
+      dropoffTerminal: trip.dropoff[1],
+      handoverDate: handover,
+      freeDays: trip.freeDays,
+      deadlineDate: addDays(handover, trip.freeDays),
+      feeUsd: trip.feeUsd,
+      detentionRatePerDayUsd: trip.detentionRate,
+      status: "ACTIVE",
+    };
+  });
+
+  const leaseContracts: Prisma.LeaseContractCreateManyInput[] = [];
+  const leaseItems: Prisma.LeaseItemCreateManyInput[] = [];
+  for (const lease of LEASES) {
+    const leaseId = randomUUID();
+    const startDate = addDays(today, -lease.startDaysAgo);
+    const offHire = lease.offHireDaysAgo !== undefined ? addDays(today, -lease.offHireDaysAgo) : null;
+    leaseContracts.push({
+      id: leaseId,
+      contractNumber: lease.contractNumber,
+      lesseeName: lease.lessee,
+      lesseeInn: lease.inn,
+      contactPerson: lease.contactPerson,
+      contactPhone: lease.phone,
+      contactEmail: lease.email,
+      startDate,
+      endDate: addDays(today, lease.endInDays),
+      autoRenewal: lease.autoRenewal,
+      dailyRateUsd: lease.dailyRate,
+      depositUsd: lease.deposit,
+      paymentStatus: lease.paymentStatus,
+      allowedReturnLocodes: lease.allowedReturn.join(","),
+      onHireSurvey: "SIGNED",
+      offHireSurvey: lease.status === "COMPLETED" ? "SIGNED" : lease.endInDays <= 14 ? "PENDING" : "NOT_STARTED",
+      status: lease.status,
+      notes: lease.notes ?? null,
+    });
+    for (const key of lease.containerKeys) {
+      leaseItems.push({
+        leaseId,
+        containerId: idOf(key, `договор ${lease.contractNumber}`),
+        onHireDate: startDate,
+        offHireDate: offHire,
+        returnLocode: offHire ? lease.allowedReturn[0] : null,
+      });
+    }
+  }
+
+  // Хэши паролей считаем до транзакции, чтобы не держать её открытой во время bcrypt.
+  const users = await Promise.all(DEMO_USERS.map(async (u) => ({ ...u, passwordHash: await bcrypt.hash(u.password, 10) })));
+
   return prisma.$transaction(
     async (tx) => {
       await clearDomainData(tx);
-      await upsertUsers(tx);
-
-      const idByKey = new Map<string, string>();
-      let eventCount = 0;
-      let tripCount = 0;
-
-      for (const { spec, build } of builds) {
-        const container = await tx.container.create({ data: build.data, select: { id: true } });
-        idByKey.set(spec.key, container.id);
-        const events = build.events
-          .filter((e) => new Date(e.occurredAt).getTime() <= now.getTime())
-          .map((e) => ({ ...e, containerId: container.id }));
-        await tx.containerEvent.createMany({ data: events });
-        await tx.oneWayTrip.createMany({ data: build.trips.map((t) => ({ ...t, containerId: container.id })) });
-        eventCount += events.length;
-        tripCount += build.trips.length;
-      }
-
-      for (const trip of ACTIVE_TRIPS) {
-        const spec = CONTAINERS.find((c) => c.key === trip.containerKey);
-        const containerId = idByKey.get(trip.containerKey);
-        if (!spec || !containerId) throw new Error(`Не найден контейнер ${trip.containerKey} для One-Way`);
-        const handover = addDays(today, -spec.sinceDays);
-        await tx.oneWayTrip.create({
-          data: {
-            containerId,
-            counterpartyName: trip.counterparty,
-            counterpartyInn: trip.inn,
-            counterpartyContact: trip.contact,
-            bookingRef: trip.bookingRef,
-            pickupLocode: spec.locode,
-            pickupTerminal: spec.terminal,
-            dropoffLocode: trip.dropoff[0],
-            dropoffTerminal: trip.dropoff[1],
-            handoverDate: handover,
-            freeDays: trip.freeDays,
-            deadlineDate: addDays(handover, trip.freeDays),
-            feeUsd: trip.feeUsd,
-            detentionRatePerDayUsd: trip.detentionRate,
-            status: "ACTIVE",
-          },
-        });
-        tripCount += 1;
-      }
-
-      for (const lease of LEASES) {
-        const startDate = addDays(today, -lease.startDaysAgo);
-        await tx.leaseContract.create({
-          data: {
-            contractNumber: lease.contractNumber,
-            lesseeName: lease.lessee,
-            lesseeInn: lease.inn,
-            contactPerson: lease.contactPerson,
-            contactPhone: lease.phone,
-            contactEmail: lease.email,
-            startDate,
-            endDate: addDays(today, lease.endInDays),
-            autoRenewal: lease.autoRenewal,
-            dailyRateUsd: lease.dailyRate,
-            depositUsd: lease.deposit,
-            paymentStatus: lease.paymentStatus,
-            allowedReturnLocodes: lease.allowedReturn.join(","),
-            onHireSurvey: "SIGNED",
-            offHireSurvey: lease.status === "COMPLETED" ? "SIGNED" : lease.endInDays <= 14 ? "PENDING" : "NOT_STARTED",
-            status: lease.status,
-            notes: lease.notes ?? null,
-            items: {
-              create: lease.containerKeys.map((key) => {
-                const containerId = idByKey.get(key);
-                if (!containerId) throw new Error(`Не найден контейнер ${key} для договора ${lease.contractNumber}`);
-                const offHire = lease.offHireDaysAgo !== undefined ? addDays(today, -lease.offHireDaysAgo) : null;
-                return { containerId, onHireDate: startDate, offHireDate: offHire, returnLocode: offHire ? lease.allowedReturn[0] : null };
-              }),
-            },
-          },
+      for (const user of users) {
+        await tx.user.upsert({
+          where: { email: user.email },
+          update: { name: user.name, role: user.role, passwordHash: user.passwordHash },
+          create: { email: user.email, name: user.name, role: user.role, passwordHash: user.passwordHash },
         });
       }
+      await tx.container.createMany({ data: containers });
+      await tx.containerEvent.createMany({ data: events });
+      await tx.oneWayTrip.createMany({ data: [...historyTrips, ...activeTrips] });
+      await tx.leaseContract.createMany({ data: leaseContracts });
+      await tx.leaseItem.createMany({ data: leaseItems });
 
-      return { containers: builds.length, events: eventCount, oneWayTrips: tripCount, leases: LEASES.length };
+      return { containers: containers.length, events: events.length, oneWayTrips: historyTrips.length + activeTrips.length, leases: leaseContracts.length };
     },
-    { timeout: 60_000, maxWait: 10_000 },
+    { timeout: 60_000, maxWait: 15_000 },
   );
 }

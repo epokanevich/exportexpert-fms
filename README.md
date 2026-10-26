@@ -8,12 +8,12 @@
 
 ## Быстрый старт
 
-Требуется Node.js 20+.
+Требуется Node.js 20.9+ и PostgreSQL 14+ (облачный [Neon](https://neon.tech), Vercel Postgres или локальный).
 
 ```bash
 npm install
-cp .env.example .env      # задайте AUTH_SECRET (≥ 32 символов)
-npm run setup             # создаёт SQLite-базу и загружает демо-данные
+cp .env.example .env      # укажите DATABASE_URL (PostgreSQL) и AUTH_SECRET (≥ 32 символов)
+npm run setup             # prisma db push + prisma db seed: схема и демо-данные
 npm run dev               # http://localhost:3000
 ```
 
@@ -27,7 +27,9 @@ npm run dev               # http://localhost:3000
 | `npm run build` / `npm start` | Production-сборка и запуск |
 | `npm run typecheck` | Проверка типов |
 | `npm test` | Unit-тесты доменной логики (Vitest) |
-| `npm run db:seed` | Перезалить демо-данные |
+| `npm run db:push` | Применить схему `prisma/schema.prisma` к базе |
+| `npm run db:seed` | Перезалить демо-данные (`prisma db seed`, очищает доменные таблицы) |
+| `npm run db:bootstrap` | Залить демо-данные, **только если база пустая** (используется при деплое) |
 
 ## Что показать проверяющему (демо-сценарии)
 
@@ -68,7 +70,41 @@ npm run dev               # http://localhost:3000
 - Начисления аренды: дни On-Hire … накануне Off-Hire × Per Diem по каждой единице.
 - ROI единицы = (выручка − ремонты − амортизация) / цена покупки.
 
-## Переход на PostgreSQL
+## База данных: PostgreSQL (Neon)
 
-В `prisma/schema.prisma` замените `provider = "sqlite"` на `"postgresql"`, укажите `DATABASE_URL`
-и выполните `npx prisma migrate dev --name init && npm run db:seed`.
+- Провайдер Prisma — `postgresql`; строка подключения только в переменной `DATABASE_URL`
+  (локально — `.env`, в облаке — переменные окружения Vercel). В репозиторий попадает лишь шаблон `.env.example`.
+- Для Neon используйте **pooled**-хост (`…-pooler…`) и `sslmode=require` — так serverless-функции Vercel
+  не исчерпывают лимит соединений.
+- Демо-сид пишет данные пакетно (≈12 запросов в одной транзакции, ~2 с), поэтому «Сбросить демо-данные»
+  укладывается в лимит serverless-функции (`maxDuration = 60`).
+- Схема совместима и с SQLite: для полностью офлайн-демо достаточно вернуть `provider = "sqlite"` и
+  `DATABASE_URL="file:./dev.db"`.
+
+## Деплой на Vercel
+
+1. Создайте базу в Neon (Connect → Prisma → pooled connection string).
+2. Импортируйте репозиторий в Vercel (Framework: Next.js — определяется автоматически).
+3. В **Settings → Environment Variables** задайте для Production (и Preview, если нужно):
+   - `DATABASE_URL` — строка Neon вида `postgresql://user:password@host/dbname?sslmode=require`;
+   - `AUTH_SECRET` — случайная строка ≥ 32 символов
+     (`node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`).
+4. Deploy. Vercel вызывает скрипт `vercel-build`:
+   `prisma generate → prisma db push → prisma/bootstrap.ts → next build`.
+   Схема применяется автоматически; демо-данные загружаются **только в пустую базу**, повторные деплои
+   рабочие данные не затирают. `prisma db push` без `--accept-data-loss` остановит деплой, если изменение
+   схемы грозит потерей данных.
+5. Откройте сайт → «Быстрый демо-вход в 1 клик».
+
+> **Сетевое ограничение.** Из некоторых сетей TLS-соединения с облачными хостингами (AWS, где работает Neon)
+> обрываются после первых ~10–16 КБ трафика: подключение устанавливается, но `prisma db push`, сид и любые
+> «тяжёлые» запросы зависают или завершаются `P1017: Server has closed the connection`. Это не ошибка приложения.
+> В таком случае выполняйте `npm run setup` из другой сети (CI, сервер, VPN) или просто задеплойте проект —
+> начальная загрузка выполнится на стороне Vercel.
+
+### Замечания для продакшена
+
+- Ограничитель попыток входа хранится в памяти инстанса; при нескольких serverless-инстансах нужен общий
+  стор (Redis / Upstash).
+- Для эволюции схемы с историей изменений перейдите с `db push` на `prisma migrate` (`migrate dev` локально,
+  `migrate deploy` в `vercel-build`).

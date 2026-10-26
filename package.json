@@ -6,12 +6,14 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
+    "vercel-build": "prisma generate && prisma db push --skip-generate && tsx prisma/bootstrap.ts && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts",
-    "setup": "prisma db push && tsx prisma/seed.ts",
+    "db:seed": "prisma db seed",
+    "db:bootstrap": "tsx prisma/bootstrap.ts",
+    "setup": "prisma db push && prisma db seed",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -45,5 +47,11 @@
     "prisma@6.19.3": true,
     "@prisma/engines@6.19.3": true,
     "esbuild@0.28.2": true
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "engines": {
+    "node": ">=20.9"
   }
 }
