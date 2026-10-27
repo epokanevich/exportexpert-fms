@@ -83,7 +83,7 @@ export default async function ContainerProfilePage({ params }: { params: Params 
         <div className={cn("absolute inset-y-0 left-0 w-1.5", isWrittenOff ? "bg-slate-400" : "bg-indigo-600")} aria-hidden />
         <div className="flex flex-col gap-4 p-5 pl-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="font-mono text-xs tracking-widest text-slate-400 uppercase">
+            <p className="font-mono text-xs tracking-widest text-slate-500 uppercase">
               {isOneOf(SIZE_TYPES, c.sizeType) ? SIZE_TYPE_LABELS[c.sizeType] : c.sizeType} · ISO {c.isoCode} · {teuOf(c.sizeType)} TEU
             </p>
             <h1 className="mt-1">

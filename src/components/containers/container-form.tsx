@@ -171,7 +171,7 @@ export function ContainerForm({ containerId, initial, onDone }: ContainerFormPro
     <>
       <form onSubmit={handleSubmit} className="space-y-6">
         <fieldset className="space-y-3">
-          <legend className="mb-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">Паспорт и идентификация</legend>
+          <legend className="mb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">Паспорт и идентификация</legend>
           <Field label="Номер контейнера (ISO 6346)" htmlFor="bicCode" error={err("bicCode")}>
             <Input
               id="bicCode"
@@ -235,7 +235,7 @@ export function ContainerForm({ containerId, initial, onDone }: ContainerFormPro
         </fieldset>
 
         <fieldset className="space-y-3">
-          <legend className="mb-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">Техническое состояние</legend>
+          <legend className="mb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">Техническое состояние</legend>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Грейд" htmlFor="grade" error={err("conditionGrade")} hint={techHint}>
               <Select id="grade" name="conditionGrade" value={values.conditionGrade} disabled={techLocked} onChange={(e) => set("conditionGrade", e.target.value)}>
@@ -261,7 +261,7 @@ export function ContainerForm({ containerId, initial, onDone }: ContainerFormPro
         </fieldset>
 
         <fieldset className="space-y-3">
-          <legend className="mb-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">Дислокация</legend>
+          <legend className="mb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">Дислокация</legend>
           <Field label="Операционный статус" htmlFor="op" error={err("operationalStatus")} hint={isManaged ? "Управляется модулем One-Way / аренды / списанием" : undefined}>
             <Select id="op" value={values.operationalStatus} onChange={(e) => set("operationalStatus", e.target.value)} disabled={isEdit && isManaged}>
               {(isManaged ? OPERATIONAL_STATUSES : EDITABLE_OPERATIONAL_STATUSES).map((s) => (
@@ -293,13 +293,13 @@ export function ContainerForm({ containerId, initial, onDone }: ContainerFormPro
               </datalist>
             </Field>
             <Field label="Хранение, $/сутки" htmlFor="storageRate" error={err("storageRatePerDayUsd")}>
-              <Input id="storageRate" type="number" inputMode="decimal" step="0.1" min={0} value={values.storageRatePerDayUsd} onChange={(e) => set("storageRatePerDayUsd", e.target.value)} />
+              <Input id="storageRate" type="number" inputMode="decimal" step="0.01" min={0} value={values.storageRatePerDayUsd} onChange={(e) => set("storageRatePerDayUsd", e.target.value)} />
             </Field>
           </div>
         </fieldset>
 
         <fieldset className="space-y-3">
-          <legend className="mb-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">Комплаенс и собственник</legend>
+          <legend className="mb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">Комплаенс и собственник</legend>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Номер таблички CSC" htmlFor="cscPlateNumber" error={err("cscPlateNumber")} hint="Safety Approval">
               <Input id="cscPlateNumber" name="cscPlateNumber" value={values.cscPlateNumber} placeholder="RS/CSC/1234/2021" onChange={(e) => set("cscPlateNumber", e.target.value)} />
@@ -326,16 +326,16 @@ export function ContainerForm({ containerId, initial, onDone }: ContainerFormPro
         </fieldset>
 
         <fieldset className="space-y-3">
-          <legend className="mb-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">Финансы</legend>
+          <legend className="mb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">Финансы</legend>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Дата покупки" htmlFor="purchaseDate" error={err("purchaseDate")}>
               <Input id="purchaseDate" type="date" value={values.purchaseDate} onChange={(e) => set("purchaseDate", e.target.value)} />
             </Field>
             <Field label="Цена покупки, $" htmlFor="price" error={err("purchasePriceUsd")}>
-              <Input id="price" type="number" inputMode="decimal" min={0} value={values.purchasePriceUsd} onChange={(e) => set("purchasePriceUsd", e.target.value)} />
+              <Input id="price" type="number" inputMode="decimal" step="0.01" min={0} value={values.purchasePriceUsd} onChange={(e) => set("purchasePriceUsd", e.target.value)} />
             </Field>
             <Field label="Остаточная стоимость, $" htmlFor="book" error={err("currentBookValueUsd")} className="col-span-2">
-              <Input id="book" type="number" inputMode="decimal" min={0} value={values.currentBookValueUsd} onChange={(e) => set("currentBookValueUsd", e.target.value)} />
+              <Input id="book" type="number" inputMode="decimal" step="0.01" min={0} value={values.currentBookValueUsd} onChange={(e) => set("currentBookValueUsd", e.target.value)} />
             </Field>
           </div>
           <Field label="Примечания" htmlFor="notes" error={err("notes")}>

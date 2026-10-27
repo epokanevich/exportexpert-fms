@@ -1,5 +1,5 @@
 import "server-only";
-import { z } from "zod";
+import { z } from "@/lib/zod-setup";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth/dal";
 import type { SessionPayload } from "@/lib/auth/session";
@@ -7,9 +7,6 @@ import { can, type Permission } from "@/lib/auth/permissions";
 import { parseDateInput } from "@/lib/dates";
 import { describeDbError } from "@/lib/db-errors";
 import type { ActionResult } from "./types";
-
-// 4.3: сообщения Zod по умолчанию (поля без своего текста) — на русском, а не на английском.
-z.config(z.locales.ru());
 
 export type Parsed<T> = { ok: true; data: T } | { ok: false; result: ActionResult };
 

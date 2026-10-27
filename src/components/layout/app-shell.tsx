@@ -59,6 +59,9 @@ function useProfileActions() {
   return { reset, logout, isResetting, isLoggingOut };
 }
 
+/** Ссылки профиля в тёмном сайдбаре (compact): светлый текст для контраста ≥ 4.5:1. */
+const darkLink = "text-slate-300 hover:bg-white/10 hover:text-white";
+
 function ProfileActions({ onDone, compact = false, canReset, isAdmin }: { onDone?: () => void; compact?: boolean; canReset: boolean; isAdmin: boolean }) {
   const { reset, logout, isResetting, isLoggingOut } = useProfileActions();
   const [confirming, setConfirming] = useState(false);
@@ -90,12 +93,13 @@ function ProfileActions({ onDone, compact = false, canReset, isAdmin }: { onDone
 
   return (
     <div className={cn("grid gap-2", compact ? "grid-cols-1" : "grid-cols-1")}>
-      <Link href="/profile" onClick={onDone} className={buttonClasses("ghost", compact ? "sm" : "md", "justify-start")}>
+
+      <Link href="/profile" onClick={onDone} className={buttonClasses("ghost", compact ? "sm" : "md", cn("justify-start", compact && darkLink))}>
         <KeyRound aria-hidden />
         Профиль и пароль
       </Link>
       {isAdmin && (
-        <Link href="/admin" onClick={onDone} className={buttonClasses("ghost", compact ? "sm" : "md", "justify-start")}>
+        <Link href="/admin" onClick={onDone} className={buttonClasses("ghost", compact ? "sm" : "md", cn("justify-start", compact && darkLink))}>
           <ShieldCheck aria-hidden />
           Пользователи и аудит
         </Link>
@@ -106,7 +110,7 @@ function ProfileActions({ onDone, compact = false, canReset, isAdmin }: { onDone
           Сбросить демо-данные к исходным
         </Button>
       )}
-      <Button variant="ghost" size={compact ? "sm" : "md"} className="justify-start text-rose-600 hover:bg-rose-50 hover:text-rose-700" loading={isLoggingOut} onClick={logout}>
+      <Button variant="ghost" size={compact ? "sm" : "md"} className={cn("justify-start", compact ? "text-rose-300 hover:bg-white/10 hover:text-rose-200" : "text-rose-600 hover:bg-rose-50 hover:text-rose-700")} loading={isLoggingOut} onClick={logout}>
         <LogOut aria-hidden />
         Выйти
       </Button>

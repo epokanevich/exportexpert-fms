@@ -63,13 +63,13 @@ export function EventTimeline({ events, compact = false, canUpload = false }: Ev
             <div className="min-w-0 flex-1 pt-0.5">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
                 <p className="text-sm font-semibold text-slate-900">{label}</p>
-                <time className="font-mono text-xs text-slate-400 tabular" dateTime={new Date(event.occurredAt).toISOString()}>
+                <time className="font-mono text-xs text-slate-500 tabular" dateTime={new Date(event.occurredAt).toISOString()}>
                   {formatDateTime(event.occurredAt)}
                 </time>
               </div>
               <p className={cn("mt-0.5 text-sm text-slate-600", compact && "line-clamp-2")}>{event.description}</p>
               {!compact && (
-                <p className="mt-1 flex flex-wrap gap-x-3 text-xs text-slate-400">
+                <p className="mt-1 flex flex-wrap gap-x-3 text-xs text-slate-500">
                   {event.locode && (
                     <span>
                       <span className="font-mono">{event.locode}</span> · {locodeCity(event.locode)}
@@ -90,7 +90,7 @@ export function EventTimeline({ events, compact = false, canUpload = false }: Ev
                       rel="noopener"
                       className="inline-flex min-h-11 items-center gap-1 rounded-md bg-slate-100 px-2.5 text-xs text-slate-700 hover:bg-slate-200 sm:min-h-8"
                     >
-                      <Paperclip className="size-3.5" aria-hidden /> {a.fileName} <span className="text-slate-400">· {formatFileSize(a.sizeBytes)}</span>
+                      <Paperclip className="size-3.5" aria-hidden /> {a.fileName} <span className="text-slate-500">· {formatFileSize(a.sizeBytes)}</span>
                     </a>
                   ))}
                   {canUpload && <AttachmentUploader eventId={event.id} label={label} />}

@@ -79,15 +79,15 @@ export function NewLeaseForm({ containers, onDone }: { containers: IssuableConta
           <Input id="nl-end" type="date" value={v.endDate} onChange={(e) => set("endDate", e.target.value)} />
         </Field>
         <Field label="Per Diem, $/сутки за ед." htmlFor="nl-rate" error={fieldErrors.dailyRateUsd}>
-          <Input id="nl-rate" type="number" inputMode="decimal" step="0.05" min={0} value={v.dailyRateUsd} onChange={(e) => set("dailyRateUsd", e.target.value)} />
+          <Input id="nl-rate" type="number" inputMode="decimal" step="0.01" min={0} value={v.dailyRateUsd} onChange={(e) => set("dailyRateUsd", e.target.value)} />
         </Field>
         <Field label="Депозит, $" htmlFor="nl-deposit" error={fieldErrors.depositUsd}>
-          <Input id="nl-deposit" type="number" inputMode="decimal" min={0} value={v.depositUsd} onChange={(e) => set("depositUsd", e.target.value)} />
+          <Input id="nl-deposit" type="number" inputMode="decimal" step="0.01" min={0} value={v.depositUsd} onChange={(e) => set("depositUsd", e.target.value)} />
         </Field>
       </div>
 
       <label className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-3 text-sm">
-        <input type="checkbox" checked={autoRenewal} onChange={(e) => setAutoRenewal(e.target.checked)} className="size-4 accent-indigo-600" />
+        <input type="checkbox" name="autoRenewal" checked={autoRenewal} onChange={(e) => setAutoRenewal(e.target.checked)} className="size-4 accent-indigo-600" />
         Автопролонгация по окончании срока
       </label>
 
@@ -127,7 +127,7 @@ export function NewLeaseForm({ containers, onDone }: { containers: IssuableConta
                   !blocked && (selected.includes(c.id) ? "bg-indigo-50" : "hover:bg-slate-50"),
                 )}
               >
-                <input type="checkbox" aria-label={formatBic(c.bicCode)} disabled={blocked} checked={selected.includes(c.id)} onChange={() => setSelected((p) => toggle(p, c.id))} className="size-4 accent-indigo-600" />
+                <input type="checkbox" name="containerIds" value={c.id} aria-label={formatBic(c.bicCode)} disabled={blocked} checked={selected.includes(c.id)} onChange={() => setSelected((p) => toggle(p, c.id))} className="size-4 accent-indigo-600" />
                 <BicCode code={c.bicCode} size="sm" />
                 <span className="font-mono text-xs text-slate-500">{c.sizeType}</span>
                 {blocked ? (
@@ -149,9 +149,9 @@ export function NewLeaseForm({ containers, onDone }: { containers: IssuableConta
       </Field>
 
       <div className="rounded-lg bg-slate-900 px-4 py-3 text-sm text-white">
-        <p className="text-slate-400">Стоимость договора за весь срок</p>
+        <p className="text-slate-500">Стоимость договора за весь срок</p>
         <p className="font-mono text-xl font-semibold">{formatUsd(Math.round(contractValue))}</p>
-        <p className="font-mono text-xs text-slate-400">{termDays} сут. × {formatUsd(Number(v.dailyRateUsd || 0), 2)} × {selected.length} ед.</p>
+        <p className="font-mono text-xs text-slate-500">{termDays} сут. × {formatUsd(Number(v.dailyRateUsd || 0), 2)} × {selected.length} ед.</p>
       </div>
 
       <Button type="submit" size="lg" className="w-full" loading={isPending}>
@@ -243,7 +243,7 @@ export function OffHireForm({ lease, onDone }: { lease: LeaseRow; onDone: () => 
         <div className="space-y-1 rounded-lg border border-slate-200 p-1">
           {onHire.map((i) => (
             <label key={i.id} className={cn("flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-2 text-sm", itemIds.includes(i.id) ? "bg-indigo-50" : "hover:bg-slate-50")}>
-              <input type="checkbox" aria-label={formatBic(i.bicCode)} checked={itemIds.includes(i.id)} onChange={() => setItemIds((p) => (p.includes(i.id) ? p.filter((x) => x !== i.id) : [...p, i.id]))} className="size-4 accent-indigo-600" />
+              <input type="checkbox" name="itemIds" value={i.id} aria-label={formatBic(i.bicCode)} checked={itemIds.includes(i.id)} onChange={() => setItemIds((p) => (p.includes(i.id) ? p.filter((x) => x !== i.id) : [...p, i.id]))} className="size-4 accent-indigo-600" />
               <BicCode code={i.bicCode} size="sm" />
               <span className="ml-auto font-mono text-xs text-slate-500">{i.sizeType}</span>
             </label>
@@ -281,7 +281,7 @@ export function OffHireForm({ lease, onDone }: { lease: LeaseRow; onDone: () => 
             ] as const
           ).map((opt) => (
             <label key={opt.value} className={cn("flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 text-sm font-semibold", condition === opt.value ? opt.active : "border-slate-200 text-slate-600")}>
-              <input type="radio" className="sr-only" checked={condition === opt.value} onChange={() => setCondition(opt.value)} />
+              <input type="radio" name="condition" value={opt.value} className="sr-only" checked={condition === opt.value} onChange={() => setCondition(opt.value)} />
               <opt.icon className="size-4" /> {opt.label}
             </label>
           ))}
@@ -289,7 +289,7 @@ export function OffHireForm({ lease, onDone }: { lease: LeaseRow; onDone: () => 
       </fieldset>
       {condition === "DAMAGED" && (
         <Field label="EOR, $" htmlFor="oh-eor" error={fieldErrors.eorUsd} hint="Выставляется арендатору по условиям договора">
-          <Input id="oh-eor" type="number" inputMode="decimal" min={0} value={eorUsd} onChange={(e) => setEorUsd(e.target.value)} />
+          <Input id="oh-eor" type="number" inputMode="decimal" step="0.01" min={0} value={eorUsd} onChange={(e) => setEorUsd(e.target.value)} />
         </Field>
       )}
       <Button type="submit" size="lg" className="w-full" loading={isPending}>

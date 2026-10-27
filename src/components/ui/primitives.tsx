@@ -20,7 +20,7 @@ export function CardHeader({ title, description, icon, action, className }: Card
   return (
     <div className={cn("flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-5", className)}>
       <div className="flex min-w-0 items-start gap-2.5">
-        {icon && <span className="mt-0.5 text-slate-400 [&_svg]:size-4">{icon}</span>}
+        {icon && <span className="mt-0.5 text-slate-500 [&_svg]:size-4">{icon}</span>}
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
           {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
@@ -90,7 +90,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
       <select ref={ref} className={cn(CONTROL, "h-11 appearance-none truncate pr-9 lg:h-10", className)} {...props}>
         {children}
       </select>
-      <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-slate-400" aria-hidden />
+      <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-slate-500" aria-hidden />
     </div>
   );
 });
@@ -151,7 +151,7 @@ interface EmptyStateProps {
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
-      {icon && <div className="mb-3 rounded-full bg-slate-100 p-3 text-slate-400 [&_svg]:size-6">{icon}</div>}
+      {icon && <div className="mb-3 rounded-full bg-slate-100 p-3 text-slate-500 [&_svg]:size-6">{icon}</div>}
       <p className="text-sm font-medium text-slate-900">{title}</p>
       {description && <p className="mt-1 max-w-sm text-sm text-slate-500">{description}</p>}
       {action && <div className="mt-4">{action}</div>}

@@ -137,7 +137,7 @@ export function BicCode({ code, className, size = "md" }: { code: string; classN
       {main}
       {check !== undefined && (
         <>
-          <span className="text-slate-400">-</span>
+          <span className="text-slate-500">-</span>
           <span className="rounded bg-slate-900 px-[0.2em] text-white">{check}</span>
         </>
       )}

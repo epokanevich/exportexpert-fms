@@ -251,7 +251,7 @@ export function ContainerRegistry({ rows, total, pageCount, query }: ContainerRe
                           <GradeBadge grade={row.conditionGrade} />
                           {row.techStatus !== "SOUND" && <TechStatusBadge status={row.techStatus} />}
                         </div>
-                        {row.eorAmountUsd ? <p className="mt-1 font-mono text-xs text-orange-600">EOR {formatUsd(row.eorAmountUsd)}</p> : null}
+                        {row.eorAmountUsd ? <p className="mt-1 font-mono text-xs text-orange-700">EOR {formatUsd(row.eorAmountUsd)}</p> : null}
                       </td>
                       <td className="px-3 py-3">
                         {row.csc.level === "OK" ? <span className="font-mono text-xs whitespace-nowrap text-slate-500">{formatDate(row.cscPlateExpiry)}</span> : <CscBadge csc={row.csc} compact />}
@@ -263,12 +263,12 @@ export function ContainerRegistry({ rows, total, pageCount, query }: ContainerRe
                           <span className="text-slate-300" aria-label="нет данных">—</span>
                         )}
                       </td>
-                      <td className={cn("px-3 py-3 text-right font-mono text-xs font-medium", row.roi >= 0 ? "text-emerald-600" : "text-rose-600")}>{formatPercent(row.roi)}</td>
+                      <td className={cn("px-3 py-3 text-right font-mono text-xs font-medium", row.roi >= 0 ? "text-emerald-700" : "text-rose-700")}>{formatPercent(row.roi)}</td>
                       <td className="pr-2">
                         <Link
                           href={`/containers/${row.id}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="flex size-9 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+                          className="flex size-9 items-center justify-center rounded text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
                           aria-label={`Профиль ${formatBic(row.bicCode)}`}
                         >
                           <ChevronRight className="size-4" aria-hidden />

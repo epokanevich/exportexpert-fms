@@ -90,7 +90,7 @@ export function GateInForm({ trip, onDone }: { trip: GateInTrip; onDone: () => v
 
       {condition === "DAMAGED" && (
         <Field label="Оценка ремонта (EOR), $" htmlFor="gi-eor" error={fieldErrors.eorUsd} hint="Будет открыта претензия к контрагенту (статус DISPUTE)">
-          <Input id="gi-eor" type="number" inputMode="decimal" min={0} value={eorUsd} onChange={(e) => setEorUsd(e.target.value)} autoFocus />
+          <Input id="gi-eor" type="number" inputMode="decimal" step="0.01" min={0} value={eorUsd} onChange={(e) => setEorUsd(e.target.value)} autoFocus />
         </Field>
       )}
 

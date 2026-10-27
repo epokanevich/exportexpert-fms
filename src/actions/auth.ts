@@ -3,7 +3,7 @@
 import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { z } from "zod";
+import { z } from "@/lib/zod-setup";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import { createSessionCookie, deleteSessionCookie, readSessionToken, requireSession } from "@/lib/auth/dal";

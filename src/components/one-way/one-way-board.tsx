@@ -411,7 +411,7 @@ function ResolveDisputeForm({ trip, onDone }: { trip: TripRow; onDone: () => voi
         EOR по акту: <b className="font-mono">{formatUsd(trip.returnEorUsd ?? 0)}</b>. Укажите сумму, которую контрагент компенсировал.
       </p>
       <Field label="Компенсация, $" htmlFor="rd-sum" error={fieldErrors.compensationUsd}>
-        <Input id="rd-sum" type="number" inputMode="decimal" min={0} value={compensationUsd} onChange={(e) => setCompensation(e.target.value)} />
+        <Input id="rd-sum" type="number" inputMode="decimal" step="0.01" min={0} value={compensationUsd} onChange={(e) => setCompensation(e.target.value)} />
       </Field>
       <Field label="Комментарий" htmlFor="rd-note" error={fieldErrors.note}>
         <Input id="rd-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Номер платёжного поручения" />

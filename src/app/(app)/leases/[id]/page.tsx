@@ -35,7 +35,7 @@ export default async function LeaseDetailPage({ params }: { params: Params }) {
         <div className={cn("absolute inset-y-0 left-0 w-1.5", lease.status === "ACTIVE" ? "bg-violet-600" : lease.status === "SCHEDULED" ? "bg-violet-300" : "bg-slate-300")} aria-hidden />
         <div className="flex flex-col gap-4 p-5 pl-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <p className="font-mono text-xs tracking-widest text-slate-400 uppercase">Long-Term Lease · Per Diem</p>
+            <p className="font-mono text-xs tracking-widest text-slate-500 uppercase">Long-Term Lease · Per Diem</p>
             <h1 className="mt-1 font-mono text-2xl font-semibold text-slate-900 sm:text-3xl">{lease.contractNumber}</h1>
             <p className="mt-0.5 text-slate-600">{lease.lesseeName}</p>
             <div className="mt-3 flex flex-wrap gap-1.5">

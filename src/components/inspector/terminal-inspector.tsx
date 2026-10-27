@@ -83,7 +83,7 @@ export function TerminalInspector({ rows, tripsByContainer, leaseByContainer, in
           </div>
         </Card>
 
-        <h2 className="mt-5 mb-2 text-xs font-semibold tracking-wide text-slate-400 uppercase">Быстрая смена тех. статуса</h2>
+        <h2 className="mt-5 mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">Быстрая смена тех. статуса</h2>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {TECH_STATUSES.map((s) => (
             <button
@@ -101,7 +101,7 @@ export function TerminalInspector({ rows, tripsByContainer, leaseByContainer, in
           ))}
         </div>
 
-        <h2 className="mt-5 mb-2 text-xs font-semibold tracking-wide text-slate-400 uppercase">Действия на терминале</h2>
+        <h2 className="mt-5 mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">Действия на терминале</h2>
         <div className="grid grid-cols-2 gap-2">
           <BigAction icon={<ClipboardCheck />} label="Акт осмотра" hint="Грейд, повреждения, EOR" onClick={() => setAction({ kind: "inspect" })} tone="indigo" />
           {trip ? (
@@ -157,7 +157,7 @@ export function TerminalInspector({ rows, tripsByContainer, leaseByContainer, in
   return (
     <div className="mx-auto max-w-2xl">
       <div className="relative">
-        <Search className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-slate-400" aria-hidden />
+        <Search className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-slate-500" aria-hidden />
         <Input
           ref={inputRef}
           value={q}
@@ -170,7 +170,7 @@ export function TerminalInspector({ rows, tripsByContainer, leaseByContainer, in
           inputMode="text"
         />
         {q && (
-          <button type="button" onClick={() => setQ("")} className="absolute top-1/2 right-1 flex size-11 -translate-y-1/2 items-center justify-center rounded-full text-slate-400" aria-label="Очистить поиск">
+          <button type="button" onClick={() => setQ("")} className="absolute top-1/2 right-1 flex size-11 -translate-y-1/2 items-center justify-center rounded-full text-slate-500" aria-label="Очистить поиск">
             <X className="size-5" />
           </button>
         )}

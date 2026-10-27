@@ -81,7 +81,7 @@ export function ReviewerGuide({ onOpen, disabled }: ReviewerGuideProps) {
                 <span className="block text-sm font-semibold text-slate-900">{item.title}</span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-slate-500">{item.text}</span>
               </span>
-              <span className="mt-1 flex shrink-0 items-center gap-1 text-[11px] font-medium text-indigo-600 opacity-70 transition group-hover:opacity-100">
+              <span className="mt-1 flex shrink-0 items-center gap-1 text-[11px] font-medium text-indigo-700 transition group-hover:text-indigo-900">
                 <span className="hidden xs:inline">Открыть</span>
                 <ArrowRight className="size-3.5 transition group-hover:translate-x-0.5" aria-hidden />
               </span>

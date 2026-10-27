@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
+import { z } from "@/lib/zod-setup";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import { CONDITION_GRADES, CONDITION_GRADE_LABELS, TECH_STATUSES, TECH_STATUS_LABELS, locodeCity } from "@/lib/domain/constants";

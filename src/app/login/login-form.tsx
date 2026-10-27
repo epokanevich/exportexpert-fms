@@ -36,13 +36,13 @@ export function LoginForm({ next, demo }: LoginFormProps) {
           <input ref={nextRef} type="hidden" name="next" defaultValue={next ?? ""} />
           <Field label="Email" htmlFor="email">
             <div className="relative">
-              <Mail className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" aria-hidden />
+              <Mail className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" aria-hidden />
               <Input ref={emailRef} id="email" name="email" type="email" autoComplete="username" defaultValue={state.email ?? demo?.email ?? ""} required className="pl-9" />
             </div>
           </Field>
           <Field label="Пароль" htmlFor="password">
             <div className="relative">
-              <KeyRound className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" aria-hidden />
+              <KeyRound className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" aria-hidden />
               <Input ref={passwordRef} id="password" name="password" type="password" autoComplete="current-password" defaultValue={demo?.password ?? ""} required className="pl-9" />
             </div>
           </Field>
@@ -58,7 +58,7 @@ export function LoginForm({ next, demo }: LoginFormProps) {
 
         {demo && (
           <>
-        <div className="relative py-1 text-center text-xs text-slate-400">
+        <div className="relative py-1 text-center text-xs text-slate-500">
           <span className="absolute inset-x-0 top-1/2 h-px bg-slate-200" aria-hidden />
           <span className="relative bg-slate-50 px-3">или</span>
         </div>

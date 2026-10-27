@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
+import { z } from "@/lib/zod-setup";
 import { prisma } from "@/lib/prisma";
 import { validateBic, formatBic } from "@/lib/iso6346";
 import { startOfDayUtc } from "@/lib/dates";

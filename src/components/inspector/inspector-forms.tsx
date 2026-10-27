@@ -9,6 +9,7 @@ import { useServerAction } from "@/components/use-server-action";
 import { CONDITION_GRADES, CONDITION_GRADE_LABELS, LOCATIONS, TECH_STATUSES, TECH_STATUS_LABELS, terminalsOf, type TechStatus } from "@/lib/domain/constants";
 import { addMonths, toDateInput } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import { formatUsd } from "@/lib/format";
 import { DAMAGE_CODE_LABELS, LOCATION_FACE_LABELS, REPAIR_CODE_LABELS, eorFromDamages } from "@/lib/domain/damage";
 import { Plus, Trash2 } from "lucide-react";
 import type { ContainerRow } from "@/lib/queries/containers";
@@ -50,6 +51,8 @@ export function InspectionForm({ row, presetTech, onDone }: { row: ContainerRow;
             <label key={s} className={cn("flex h-14 cursor-pointer items-center justify-center rounded-xl border-2 text-sm font-semibold transition", techStatus === s ? TECH_TONES[s] : "border-slate-200 bg-white text-slate-600")}>
               <input
                 type="radio"
+                name="techStatus"
+                value={s}
                 className="sr-only"
                 checked={techStatus === s}
                 onChange={() => {
@@ -76,7 +79,7 @@ export function InspectionForm({ row, presetTech, onDone }: { row: ContainerRow;
           label="Оценка ремонта (EOR), $"
           htmlFor="in-eor"
           error={fieldErrors.eorUsd}
-          hint={damagesEor !== null ? `Пусто — возьмём сумму по строкам: $${damagesEor}` : undefined}
+          hint={damagesEor !== null ? `Пусто — возьмём сумму по строкам: ${formatUsd(damagesEor, 2)}` : undefined}
         >
           <Input id="in-eor" name="eorUsd" type="number" inputMode="decimal" min={0} step="0.01" value={eorUsd} onChange={(e) => setEorUsd(e.target.value)} className="h-12 text-lg" />
         </Field>

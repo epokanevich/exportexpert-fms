@@ -121,7 +121,7 @@ function EventForm({ containerId, onDone }: { containerId: string; onDone: () =>
           <Input id="ev-date" type="date" value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} />
         </Field>
         <Field label="Сумма, $" htmlFor="ev-amount" hint="Необязательно" error={fieldErrors.amountUsd}>
-          <Input id="ev-amount" type="number" inputMode="decimal" min={0} value={amountUsd} onChange={(e) => setAmountUsd(e.target.value)} />
+          <Input id="ev-amount" type="number" inputMode="decimal" step="0.01" min={0} value={amountUsd} onChange={(e) => setAmountUsd(e.target.value)} />
         </Field>
       </div>
       <Field label="Описание" htmlFor="ev-desc" error={fieldErrors.description}>

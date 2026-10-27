@@ -31,6 +31,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
+  // API-ответы (вложения, CSV) ставят собственную CSP — например, sandbox для файлов; страничная её не перезаписывает.
+  if (pathname.startsWith("/api/")) return NextResponse.next();
+
   return withCsp(request);
 }
 

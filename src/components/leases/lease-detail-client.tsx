@@ -112,7 +112,7 @@ export function LeaseCalculator({ lease }: { lease: LeaseRow }) {
                   <td className="px-3 py-2.5">
                     <Link href={`/containers/${r.containerId}`} className="hover:underline"><BicCode code={r.bicCode} size="sm" /></Link>
                     <div className="mt-0.5 flex items-center gap-1.5 sm:hidden">
-                      <span className="font-mono text-[11px] text-slate-400">{formatDate(r.onHireDate)} — {r.offHireDate ? formatDate(r.offHireDate) : "н.в."}</span>
+                      <span className="font-mono text-[11px] text-slate-500">{formatDate(r.onHireDate)} — {r.offHireDate ? formatDate(r.offHireDate) : "н.в."}</span>
                     </div>
                   </td>
                   <td className="hidden px-3 py-2.5 sm:table-cell">

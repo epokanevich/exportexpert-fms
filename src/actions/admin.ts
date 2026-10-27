@@ -2,7 +2,7 @@
 
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
+import { z } from "@/lib/zod-setup";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import { ROLES, ROLE_LABELS } from "@/lib/auth/permissions";

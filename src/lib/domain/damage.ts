@@ -3,7 +3,7 @@
  * Формат кодов проверяется строго (и в БД — CHECK), справочники ниже — подсказки для ввода
  * с распространёнными кодами; полный справочник CEDEX сверяется с M&R-подрядчиком перед боевой работой.
  */
-import { z } from "zod";
+import { z } from "@/lib/zod-setup";
 import { formatUsd } from "@/lib/format";
 import { sumMoney } from "@/lib/money";
 

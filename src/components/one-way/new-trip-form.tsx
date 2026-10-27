@@ -116,10 +116,10 @@ export function NewTripForm({ containers, onDone, presetContainerId }: { contain
       </div>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Фикс. ставка / депозит, $" htmlFor="nt-fee" error={fieldErrors.feeUsd} hint="0 — бесплатная выдача">
-          <Input id="nt-fee" type="number" inputMode="decimal" min={0} value={v.feeUsd} onChange={(e) => set("feeUsd", e.target.value)} />
+          <Input id="nt-fee" type="number" inputMode="decimal" step="0.01" min={0} value={v.feeUsd} onChange={(e) => set("feeUsd", e.target.value)} />
         </Field>
         <Field label="Детеншн, $/сутки" htmlFor="nt-det" error={fieldErrors.detentionRatePerDayUsd}>
-          <Input id="nt-det" type="number" inputMode="decimal" min={0} value={v.detentionRatePerDayUsd} onChange={(e) => set("detentionRatePerDayUsd", e.target.value)} />
+          <Input id="nt-det" type="number" inputMode="decimal" step="0.01" min={0} value={v.detentionRatePerDayUsd} onChange={(e) => set("detentionRatePerDayUsd", e.target.value)} />
         </Field>
       </div>
       <Field label="Примечание" htmlFor="nt-notes" error={fieldErrors.notes}>

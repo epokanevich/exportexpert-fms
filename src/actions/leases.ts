@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
+import { z } from "@/lib/zod-setup";
 import { prisma, type AppTransaction } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import { businessToday, latestBusinessDate } from "@/lib/business-time";

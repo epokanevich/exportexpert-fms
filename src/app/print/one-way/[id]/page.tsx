@@ -152,7 +152,7 @@ export default async function ReleaseOrderPage({ params }: { params: Params }) {
             <Signature role={`Принял: ${trip.counterpartyName}`} />
           </section>
 
-          <footer className="mt-10 border-t border-slate-200 pt-3 text-[11px] text-slate-400">
+          <footer className="mt-10 border-t border-slate-200 pt-3 text-[11px] text-slate-500">
             Сформировано в FMS «Экспортэксперт» {formatDateTime(new Date())} ({businessTimeZone()}) · {session.name} · документ {trip.bookingRef}
           </footer>
         </article>
@@ -187,11 +187,11 @@ function Signature({ role }: { role: string }) {
   return (
     <div>
       <p className="text-xs text-slate-500">{role}</p>
-      <div className="mt-10 flex items-end gap-3 text-xs text-slate-400">
+      <div className="mt-10 flex items-end gap-3 text-xs text-slate-500">
         <span className="flex-1 border-b border-slate-400" />
         <span>подпись / Ф.И.О.</span>
       </div>
-      <p className="mt-3 text-xs text-slate-400">М.П. · «____» ______________ 20___ г.</p>
+      <p className="mt-3 text-xs text-slate-500">М.П. · «____» ______________ 20___ г.</p>
     </div>
   );
 }
