@@ -6,9 +6,16 @@ import bcrypt from "bcryptjs";
 import { createPrismaClient } from "../src/lib/prisma";
 import { seedDatabase } from "../src/lib/seed/seed-database";
 import { planBootstrap } from "../src/lib/bootstrap-plan";
+import { isDemoMode } from "../src/lib/demo-mode";
 import { BCRYPT_COST } from "../src/lib/auth/password-policy";
 
 async function main(): Promise<void> {
+  if (isDemoMode() && process.env.NODE_ENV === "production") {
+    process.stdout.write(
+      "⚠ DEMO_MODE=true: на странице входа показан пароль администратора, доступен «Сбросить демо-данные». " +
+        "Только для демо-стенда — на боевом удалите переменную DEMO_MODE.\n",
+    );
+  }
   const prisma = createPrismaClient();
   try {
     const [containers, users] = await Promise.all([prisma.container.count(), prisma.user.count()]);

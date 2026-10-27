@@ -89,6 +89,40 @@ export function emptyContainerForm(): ContainerFormValues {
   };
 }
 
+/**
+ * Явное сопоставление полей формы и входа экшена: переименованное поле ломает сборку (review HIGH, без каста as unknown).
+ * Строки чисел и перечислений приводит и проверяет Zod-схема на сервере.
+ */
+function toContainerInput(v: ContainerFormValues): ContainerInput {
+  return {
+    bicCode: v.bicCode,
+    sizeType: v.sizeType as ContainerInput["sizeType"],
+    isoCode: v.isoCode,
+    manufactureYear: v.manufactureYear,
+    colorRal: v.colorRal,
+    manufacturer: v.manufacturer,
+    tareWeightKg: v.tareWeightKg,
+    maxGrossWeightKg: v.maxGrossWeightKg,
+    conditionGrade: v.conditionGrade as ContainerInput["conditionGrade"],
+    techStatus: v.techStatus as ContainerInput["techStatus"],
+    cscPlateExpiry: v.cscPlateExpiry,
+    cscPlateNumber: v.cscPlateNumber,
+    acepNumber: v.acepNumber,
+    ownershipType: v.ownershipType as ContainerInput["ownershipType"],
+    ownerName: v.ownerName,
+    lessorName: v.lessorName,
+    eorAmountUsd: v.eorAmountUsd,
+    operationalStatus: v.operationalStatus as ContainerInput["operationalStatus"],
+    currentLocode: v.currentLocode,
+    currentTerminal: v.currentTerminal,
+    storageRatePerDayUsd: v.storageRatePerDayUsd,
+    purchaseDate: v.purchaseDate,
+    purchasePriceUsd: v.purchasePriceUsd,
+    currentBookValueUsd: v.currentBookValueUsd,
+    notes: v.notes,
+  };
+}
+
 interface ContainerFormProps {
   containerId?: string;
   initial: ContainerFormValues;
@@ -124,8 +158,7 @@ export function ContainerForm({ containerId, initial, onDone }: ContainerFormPro
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // Строковые значения формы приводятся и валидируются Zod-схемой на сервере.
-    const input = values as unknown as ContainerInput;
+    const input = toContainerInput(values);
     run(
       () => (containerId ? updateContainerAction(containerId, input) : createContainerAction(input)),
       (result) => onDone(result.id),

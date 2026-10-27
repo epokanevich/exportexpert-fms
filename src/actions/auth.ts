@@ -7,7 +7,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import { createSessionCookie, deleteSessionCookie, readSessionToken, requireSession } from "@/lib/auth/dal";
-import { checkLoginAllowed, clearLoginFailures, clientIp, registerLoginFailure } from "@/lib/auth/rate-limit";
+import { clearLoginFailures, clientIp, consumeLoginAttempt } from "@/lib/auth/rate-limit";
 import { BCRYPT_COST, MAX_PASSWORD_LENGTH, passwordProblem } from "@/lib/auth/password-policy";
 import { parseInput, serverError } from "./helpers";
 import type { ActionResult } from "./types";
@@ -59,7 +59,8 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   let user;
   try {
     // D-09: лимит в PostgreSQL по ключу IP+email — общий для всех инстансов; владелец с другого IP не заперт.
-    const allowed = await checkLoginAllowed(ip, email);
+    // Попытка засчитывается до проверки пароля (атомарно) — пачка параллельных запросов не обойдёт лимит.
+    const allowed = await consumeLoginAttempt(ip, email);
     if (!allowed.allowed) {
       const minutes = Math.max(1, Math.ceil(allowed.retryAfterSec / 60));
       return { error: `Слишком много неудачных попыток входа. Повторите через ${minutes} мин.`, email };
@@ -72,7 +73,6 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   // Для несуществующего email тоже считаем bcrypt — время ответа не выдаёт, есть ли такая учётная запись.
   const isValid = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
   if (!user || !isValid) {
-    await registerLoginFailure(ip, email).catch((error: unknown) => console.error("[action:auth] rate-limit", error));
     return { error: "Неверный email или пароль", email };
   }
 
@@ -125,10 +125,9 @@ export async function changePasswordAction(input: z.input<typeof changePasswordS
 
   const ip = clientIp(await headers());
   const key = `password:${user.id}`;
-  const allowed = await checkLoginAllowed(ip, key);
+  const allowed = await consumeLoginAttempt(ip, key);
   if (!allowed.allowed) return { ok: false, error: "Слишком много неверных попыток. Повторите позже." };
   if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
-    await registerLoginFailure(ip, key);
     return { ok: false, error: "Текущий пароль указан неверно", fieldErrors: { currentPassword: "Неверный пароль" } };
   }
   const problem = passwordProblem(newPassword, { email: user.email, currentPassword });

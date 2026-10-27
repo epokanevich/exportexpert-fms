@@ -22,9 +22,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const { action } = await searchParams;
   const filter = action && action in AUDIT_ACTION_LABELS ? (action as AuditAction) : undefined;
 
+  const canViewAudit = can(session.role, "audit:view");
   const [users, logs] = await Promise.all([
     prisma.user.findMany({ orderBy: [{ role: "asc" }, { email: "asc" }], select: { id: true, email: true, name: true, role: true } }),
-    prisma.auditLog.findMany({ where: filter ? { action: filter } : undefined, orderBy: { createdAt: "desc" }, take: AUDIT_PAGE_SIZE }),
+    canViewAudit ? prisma.auditLog.findMany({ where: filter ? { action: filter } : undefined, orderBy: { createdAt: "desc" }, take: AUDIT_PAGE_SIZE }) : Promise.resolve([]),
   ]);
 
   return (
@@ -48,6 +49,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </ul>
       </Card>
 
+      {canViewAudit && (
       <Card>
         <CardHeader icon={<History />} title="Аудит-журнал" description={`Последние ${AUDIT_PAGE_SIZE} операций: кто, когда, что`} />
         <nav aria-label="Фильтр аудит-журнала" className="flex flex-wrap gap-1.5 border-b border-slate-100 px-5 pb-3">
@@ -88,6 +90,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           </div>
         )}
       </Card>
+      )}
     </>
   );
 }

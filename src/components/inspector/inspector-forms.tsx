@@ -40,7 +40,7 @@ export function InspectionForm({ row, presetTech, onDone }: { row: ContainerRow;
       className="space-y-5"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => inspectContainerAction(row.id, { techStatus, conditionGrade: grade as (typeof CONDITION_GRADES)[number], eorUsd, comment, damages }), onDone);
+        run(() => inspectContainerAction(row.id, { techStatus, conditionGrade: grade as (typeof CONDITION_GRADES)[number], eorUsd, comment, damages: damages.map(({ key: _key, ...line }) => line) }), onDone);
       }}
     >
       <fieldset>
@@ -168,6 +168,8 @@ export function CscRenewForm({ row, onDone }: { row: ContainerRow; onDone: () =>
 }
 
 interface DamageDraft {
+  /** Стабильный ключ строки: при удалении строки из середины фокус и ввод не «переезжают» (review MEDIUM). */
+  key: string;
   locationCode: string;
   component: string;
   damageCode: string;
@@ -178,7 +180,7 @@ interface DamageDraft {
   costUsd: string;
 }
 
-const EMPTY_DAMAGE: DamageDraft = { locationCode: "", component: "", damageCode: "DT", repairCode: "", lengthCm: "", widthCm: "", quantity: "1", costUsd: "" };
+const newDamage = (): DamageDraft => ({ key: crypto.randomUUID(), locationCode: "", component: "", damageCode: "DT", repairCode: "", lengthCm: "", widthCm: "", quantity: "1", costUsd: "" });
 
 /** Строки повреждений в кодах CEDEX: место, узел, повреждение, ремонт, размер, стоимость. */
 function DamageLinesEditor({ lines, onChange, errors }: { lines: DamageDraft[]; onChange: (lines: DamageDraft[]) => void; errors: Record<string, string> }) {
@@ -194,7 +196,7 @@ function DamageLinesEditor({ lines, onChange, errors }: { lines: DamageDraft[]; 
       </datalist>
       {lines.length === 0 && <p className="text-xs text-slate-500">Строк нет. Добавьте каждое повреждение отдельной строкой — сумма станет EOR.</p>}
       {lines.map((line, i) => (
-        <div key={i} className="space-y-2 rounded-lg bg-slate-50 p-2.5">
+        <div key={line.key} className="space-y-2 rounded-lg bg-slate-50 p-2.5">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Field label="Место" htmlFor={`dm-loc-${i}`} error={errors[`damages.${i}.locationCode`]} hint={LOCATION_FACE_LABELS[line.locationCode.charAt(0).toUpperCase()]}>
               <Input id={`dm-loc-${i}`} name={`damages.${i}.locationCode`} value={line.locationCode} maxLength={4} placeholder="LX2N" className="font-mono uppercase" onChange={(e) => update(i, { locationCode: e.target.value })} />
@@ -228,7 +230,7 @@ function DamageLinesEditor({ lines, onChange, errors }: { lines: DamageDraft[]; 
           </Button>
         </div>
       ))}
-      <Button type="button" variant="outline" size="sm" onClick={() => onChange([...lines, EMPTY_DAMAGE])} disabled={lines.length >= 50}>
+      <Button type="button" variant="outline" size="sm" onClick={() => onChange([...lines, newDamage()])} disabled={lines.length >= 50}>
         <Plus /> Добавить повреждение
       </Button>
     </fieldset>

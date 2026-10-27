@@ -24,31 +24,52 @@ export async function checkLoginAllowed(ip: string, email: string, now: Date = n
   return { allowed: false, retryAfterSec: Math.ceil((until - now.getTime()) / 1000) };
 }
 
-/** Атомарный upsert: окно начинается заново, если прошлое истекло. */
-async function bump(key: string, windowMs: number, now: Date): Promise<void> {
+/** Атомарный upsert со счётом: окно начинается заново, если прошлое истекло. Возвращает счётчик после инкремента. */
+async function bump(key: string, windowMs: number, now: Date): Promise<{ count: number; resetAt: Date }> {
   const resetAt = new Date(now.getTime() + windowMs);
   // Колонки — timestamp без пояса (UTC, как пишет Prisma). Параметры явно приводим к UTC:
   // иначе PostgreSQL сдвинет их на TimeZone сервера БД.
   const nowUtc = now.toISOString();
   const resetUtc = resetAt.toISOString();
-  await prisma.$executeRaw`
+  const rows = await prisma.$queryRaw<{ count: number; resetAt: Date }[]>`
     INSERT INTO "LoginAttempt" ("key", "count", "resetAt") VALUES (${key}, 1, (${resetUtc}::timestamptz AT TIME ZONE 'UTC'))
     ON CONFLICT ("key") DO UPDATE SET
       "count" = CASE WHEN "LoginAttempt"."resetAt" <= (${nowUtc}::timestamptz AT TIME ZONE 'UTC') THEN 1 ELSE "LoginAttempt"."count" + 1 END,
       "resetAt" = CASE WHEN "LoginAttempt"."resetAt" <= (${nowUtc}::timestamptz AT TIME ZONE 'UTC')
-        THEN (${resetUtc}::timestamptz AT TIME ZONE 'UTC') ELSE "LoginAttempt"."resetAt" END`;
+        THEN (${resetUtc}::timestamptz AT TIME ZONE 'UTC') ELSE "LoginAttempt"."resetAt" END
+    RETURNING "count", ("resetAt" AT TIME ZONE 'UTC') AS "resetAt"`;
+  return rows[0];
 }
 
-export async function registerLoginFailure(ip: string, email: string, now: Date = new Date()): Promise<void> {
+/**
+ * Засчитать попытку входа ДО проверки пароля (review MEDIUM): счёт и проверка — один атомарный оператор на ключ,
+ * поэтому пачка одновременных запросов не проскочит лимит. Успешный вход затем снимает свою попытку (clearLoginFailures).
+ */
+export async function consumeLoginAttempt(ip: string, email: string, now: Date = new Date()): Promise<LoginCheck> {
   const k = keys(ip, email);
-  await bump(k.ipEmail, LOGIN_LIMITS.perIpEmail.windowMs, now);
-  await bump(k.ip, LOGIN_LIMITS.perIp.windowMs, now);
+  const perIpEmail = await bump(k.ipEmail, LOGIN_LIMITS.perIpEmail.windowMs, now);
+  const perIp = await bump(k.ip, LOGIN_LIMITS.perIp.windowMs, now);
+  const blocked = [
+    perIpEmail.count > LOGIN_LIMITS.perIpEmail.max ? perIpEmail.resetAt : null,
+    perIp.count > LOGIN_LIMITS.perIp.max ? perIp.resetAt : null,
+  ].filter((d): d is Date => d !== null);
+  if (blocked.length === 0) return { allowed: true };
+  const until = Math.max(...blocked.map((d) => d.getTime()));
+  return { allowed: false, retryAfterSec: Math.max(1, Math.ceil((until - now.getTime()) / 1000)) };
+}
+
+/** Неудачная попытка без проверки лимита (например, если счёт уже засчитан ранее) — оставлено для совместимости тестов. */
+export async function registerLoginFailure(ip: string, email: string, now: Date = new Date()): Promise<void> {
+  await consumeLoginAttempt(ip, email, now);
   // Уборка истёкших записей, чтобы таблица не росла от перебора случайных email.
   await prisma.loginAttempt.deleteMany({ where: { resetAt: { lt: new Date(now.getTime() - 24 * 3_600_000) } } });
 }
 
+/** Успешный вход: счётчик IP+email обнуляется, а эта попытка возвращается в бюджет IP (вход офиса за одним NAT). */
 export async function clearLoginFailures(ip: string, email: string): Promise<void> {
-  await prisma.loginAttempt.deleteMany({ where: { key: keys(ip, email).ipEmail } });
+  const k = keys(ip, email);
+  await prisma.loginAttempt.deleteMany({ where: { key: k.ipEmail } });
+  await prisma.loginAttempt.updateMany({ where: { key: k.ip, count: { gt: 0 } }, data: { count: { decrement: 1 } } });
 }
 
 /**

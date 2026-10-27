@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { prisma, type AppTransaction } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import { businessToday, latestBusinessDate } from "@/lib/business-time";
 import { addMonths, startOfDayUtc } from "@/lib/dates";
@@ -181,6 +181,9 @@ export async function extendLeaseAction(leaseId: string, input: z.input<typeof e
 
   try {
     await prisma.$transaction(async (tx) => {
+      // Под блокировкой перечитываем статус: договор мог закрыть параллельный Off-Hire.
+      const status = await lockLease(tx, leaseId);
+      if (status === "COMPLETED") throw new ConflictError("Договор уже закрыт — обновите страницу");
       if (rate) {
         await tx.leaseRatePeriod.upsert({
           where: { leaseId_effectiveFrom: { leaseId, effectiveFrom } },
@@ -221,6 +224,12 @@ export async function extendLeaseAction(leaseId: string, input: z.input<typeof e
   return { ok: true, message: `Договор ${lease.contractNumber} продлён до ${formatDate(newEnd)}.${rateNote}` };
 }
 
+/** Блокирует строку договора до конца транзакции (SELECT … FOR UPDATE) и возвращает его текущий статус. */
+async function lockLease(tx: AppTransaction, leaseId: string): Promise<string | null> {
+  const rows = await tx.$queryRaw<{ status: string }[]>`SELECT status FROM "LeaseContract" WHERE id = ${leaseId} FOR UPDATE`;
+  return rows[0]?.status ?? null;
+}
+
 const offHireSchema = z
   .object({
     itemIds: z.array(z.string().min(1)).min(1, "Выберите контейнеры для возврата").max(MAX_LEASE_UNITS, `Не более ${MAX_LEASE_UNITS} контейнеров за раз`),
@@ -256,12 +265,13 @@ export async function offHireAction(leaseId: string, input: OffHireInput): Promi
   if (items.some((i) => data.returnDate < startOfDayUtc(i.onHireDate))) return { ok: false, error: "Дата возврата раньше даты On-Hire", fieldErrors: { returnDate: "Раньше On-Hire" } };
   if (data.returnDate > latestBusinessDate()) return { ok: false, error: "Дата возврата не может быть в будущем", fieldErrors: { returnDate: "Дата в будущем" } };
 
-  const remaining = lease.items.filter((i) => !i.offHireDate).length - items.length;
+  let remaining = lease.items.filter((i) => !i.offHireDate).length - items.length;
   const isDamaged = data.condition === "DAMAGED";
   const periods = lease.ratePeriods.length > 0 ? lease.ratePeriods : [{ effectiveFrom: lease.startDate, dailyRateUsd: lease.dailyRateUsd }];
 
   try {
     await prisma.$transaction(async (tx) => {
+      await lockLease(tx, leaseId);
       for (const item of items) {
         const accrual = accrueItem({ onHireDate: item.onHireDate, offHireDate: data.returnDate }, periods, item.onHireDate, data.returnDate);
         const breakdown = accrual.segments.map((s) => `${s.days} сут. × ${formatUsd(s.rateUsd, 2)}`).join(" + ");
@@ -293,10 +303,14 @@ export async function offHireAction(leaseId: string, input: OffHireInput): Promi
           },
         });
       }
+      // Остаток — по зафиксированным данным под блокировкой договора: параллельный Off-Hire других единиц
+      // того же договора уже учтён, поэтому последний возврат гарантированно закрывает договор.
+      const stillOnHire = await tx.leaseItem.count({ where: { leaseId, offHireDate: null } });
       await tx.leaseContract.update({
         where: { id: leaseId },
-        data: remaining === 0 ? { status: "COMPLETED", offHireSurvey: "SIGNED" } : { offHireSurvey: "PENDING" },
+        data: stillOnHire === 0 ? { status: "COMPLETED", offHireSurvey: "SIGNED" } : { offHireSurvey: "PENDING" },
       });
+      remaining = stillOnHire;
       await audit(tx, {
         actor: actorOf(session),
         action: "LEASE_OFF_HIRE",

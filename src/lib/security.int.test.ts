@@ -4,7 +4,7 @@ vi.mock("server-only", () => ({}));
 
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
-import { LOGIN_LIMITS, checkLoginAllowed, clearLoginFailures, registerLoginFailure } from "@/lib/auth/rate-limit";
+import { LOGIN_LIMITS, checkLoginAllowed, clearLoginFailures, consumeLoginAttempt, registerLoginFailure } from "@/lib/auth/rate-limit";
 import { createUser, resetDomain } from "../../test/fixtures";
 
 beforeEach(() => resetDomain(prisma));
@@ -70,5 +70,18 @@ describe("3.2 login rate limit in PostgreSQL (D-09)", () => {
     await registerLoginFailure("10.0.0.5", "c@fms.ru", T0);
     await clearLoginFailures("10.0.0.5", "c@fms.ru");
     expect(await prisma.loginAttempt.findUnique({ where: { key: "10.0.0.5|c@fms.ru" } })).toBeNull();
+  });
+
+  test("review MEDIUM: a burst of concurrent attempts cannot exceed the limit (count-and-check is one atomic statement)", async () => {
+    const results = await Promise.all(Array.from({ length: 20 }, () => consumeLoginAttempt("10.0.0.6", "d@fms.ru", T0)));
+    expect(results.filter((r) => r.allowed)).toHaveLength(LOGIN_LIMITS.perIpEmail.max);
+  });
+
+  test("successful logins from one office NAT do not eat the per-IP budget", async () => {
+    for (let i = 0; i < LOGIN_LIMITS.perIp.max + 5; i++) {
+      expect(await consumeLoginAttempt("10.0.0.7", `staff${i}@fms.ru`, T0)).toEqual({ allowed: true });
+      await clearLoginFailures("10.0.0.7", `staff${i}@fms.ru`);
+    }
+    expect(await consumeLoginAttempt("10.0.0.7", "late@fms.ru", T0)).toEqual({ allowed: true });
   });
 });

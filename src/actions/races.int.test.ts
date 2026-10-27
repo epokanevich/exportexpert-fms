@@ -9,7 +9,7 @@ vi.mock("@/lib/auth/dal", async () => {
 
 import { prisma } from "@/lib/prisma";
 import { createOneWayAction, registerOneWayReturnAction } from "./one-way";
-import { createLeaseAction, offHireAction } from "./leases";
+import { createLeaseAction, extendLeaseAction, offHireAction } from "./leases";
 import { gateOutAction } from "./inspector";
 import { createContainer, createLease, createUser, resetDomain, tripData } from "../../test/fixtures";
 import { actAsUser } from "../../test/session-mock";
@@ -84,5 +84,30 @@ describe("5.3 races on real PostgreSQL (D-03 / D-04 retest)", () => {
     );
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     expect(await prisma.oneWayTrip.count({ where: { containerId: c.id, status: "ACTIVE" } })).toBe(1);
+  });
+
+  test("review HIGH: parallel Off-Hire of different units closes the lease (remaining is counted inside the transaction)", async () => {
+    const units = await Promise.all([1, 2, 3].map(() => createContainer(prisma, { operationalStatus: "LONG_TERM_LEASE", storageStartDate: null })));
+    const lease = await createLease(prisma, units.map((u) => u.id), { allowedReturnLocodes: "RULED" });
+    const items = await prisma.leaseItem.findMany({ where: { leaseId: lease.id }, orderBy: { id: "asc" } });
+
+    const off = (ids: string[]) => offHireAction(lease.id, { itemIds: ids, returnDate: "2026-01-11", returnLocode: "RULED", terminal: "ПКТ", condition: "SOUND" });
+    const results = await Promise.all([off([items[0].id, items[1].id]), off([items[2].id])]);
+
+    expect(results.every((r) => r.ok)).toBe(true);
+    expect(await prisma.leaseItem.count({ where: { leaseId: lease.id, offHireDate: null } })).toBe(0);
+    expect((await prisma.leaseContract.findUniqueOrThrow({ where: { id: lease.id } })).status).toBe("COMPLETED");
+  });
+
+  test("review MEDIUM: an extension racing the final Off-Hire never touches a closed lease", async () => {
+    const c = await createContainer(prisma, { operationalStatus: "LONG_TERM_LEASE", storageStartDate: null });
+    const lease = await createLease(prisma, [c.id], { allowedReturnLocodes: "RULED" });
+    const item = await prisma.leaseItem.findFirstOrThrow({ where: { leaseId: lease.id } });
+    await Promise.all([
+      offHireAction(lease.id, { itemIds: [item.id], returnDate: "2026-01-11", returnLocode: "RULED", terminal: "ПКТ", condition: "SOUND" }),
+      extendLeaseAction(lease.id, { months: 6 }),
+    ]);
+    const after = await prisma.leaseContract.findUniqueOrThrow({ where: { id: lease.id } });
+    if (after.status === "COMPLETED") expect(after.offHireSurvey).toBe("SIGNED");
   });
 });

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Eye, FileSpreadsheet, MapPin, PackageOpen, Plus, Search, SlidersHorizontal, TriangleAlert, X } from "lucide-react";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Badge, Card, DataList, EmptyState, Input, Select } from "@/components/ui/primitives";
@@ -54,14 +54,21 @@ export function ContainerRegistry({ rows, total, pageCount, query }: ContainerRe
     startTransition(() => router.replace(`${pathname}${registryQueryString(merged)}`, { scroll: false }));
   }
 
+  // Актуальный query для отложенного поиска: фильтр, выбранный во время ожидания, не откатывается (review HIGH).
+  const latestQuery = useRef(query);
+  useEffect(() => {
+    latestQuery.current = query;
+  }, [query]);
+
   // Поиск по номеру — с задержкой, чтобы не дёргать сервер на каждую букву.
   useEffect(() => {
-    if (search.replace(/[\s-]/g, "").toUpperCase() === query.q) return;
-    const id = setTimeout(() => navigate({ q: search }), SEARCH_DEBOUNCE_MS);
+    if (search.replace(/[\s-]/g, "").toUpperCase() === latestQuery.current.q) return;
+    const id = setTimeout(() => {
+      const next = { ...latestQuery.current, q: search, page: 1 };
+      startTransition(() => router.replace(`${pathname}${registryQueryString(next)}`, { scroll: false }));
+    }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(id);
-    // navigate меняется на каждый рендер; запускаем только по вводу.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [search, pathname, router]);
 
   const selected = rows.find((r) => r.id === selectedId) ?? null;
   const activeFilterCount = [query.locode, query.size, query.status, query.grade, query.tech].filter(Boolean).length + (query.attention ? 1 : 0);
