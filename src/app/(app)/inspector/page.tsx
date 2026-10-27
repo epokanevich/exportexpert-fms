@@ -4,12 +4,13 @@ import { TerminalInspector } from "@/components/inspector/terminal-inspector";
 import type { GateInTrip } from "@/components/one-way/gate-in-form";
 import { getContainerRows } from "@/lib/queries/containers";
 import { prisma } from "@/lib/prisma";
+import { businessToday } from "@/lib/business-time";
 
 export const metadata: Metadata = { title: "Терминальный инспектор" };
 
 export default async function InspectorPage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
   const { id } = await searchParams;
-  const now = new Date();
+  const now = businessToday();
   const [rows, trips, leaseItems] = await Promise.all([
     getContainerRows(now),
     prisma.oneWayTrip.findMany({ where: { status: "ACTIVE" } }),

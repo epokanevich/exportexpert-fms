@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/ui/primitives";
 import { ContainerRegistry, type RegistryFilters } from "@/components/containers/container-registry";
 import { getContainerRows } from "@/lib/queries/containers";
 import { teuOf } from "@/lib/domain/constants";
+import { businessToday } from "@/lib/business-time";
 
 export const metadata: Metadata = { title: "Реестр контейнеров" };
 
@@ -14,7 +15,7 @@ function first(value: string | string[] | undefined): string {
 
 export default async function ContainersPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const rows = await getContainerRows(new Date());
+  const rows = await getContainerRows(businessToday());
   const initialFilters: Partial<RegistryFilters> = {
     q: first(params.q),
     status: first(params.status),

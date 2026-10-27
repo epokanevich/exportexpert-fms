@@ -9,18 +9,19 @@ import { getLeaseRow } from "@/lib/queries/operations";
 import { SURVEY_STATUS_LABELS, locodeCity } from "@/lib/domain/constants";
 import { formatDate, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { businessToday } from "@/lib/business-time";
 
 type Params = Promise<{ id: string }>;
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { id } = await params;
-  const lease = await getLeaseRow(id, new Date());
+  const lease = await getLeaseRow(id, businessToday());
   return { title: lease ? `Договор ${lease.contractNumber}` : "Договор не найден" };
 }
 
 export default async function LeaseDetailPage({ params }: { params: Params }) {
   const { id } = await params;
-  const lease = await getLeaseRow(id, new Date());
+  const lease = await getLeaseRow(id, businessToday());
   if (!lease) notFound();
   const { metrics } = lease;
 
@@ -31,14 +32,14 @@ export default async function LeaseDetailPage({ params }: { params: Params }) {
       </Link>
 
       <Card className="relative mb-4 overflow-hidden lg:mb-6">
-        <div className={cn("absolute inset-y-0 left-0 w-1.5", lease.status === "ACTIVE" ? "bg-violet-600" : "bg-slate-300")} aria-hidden />
+        <div className={cn("absolute inset-y-0 left-0 w-1.5", lease.status === "ACTIVE" ? "bg-violet-600" : lease.status === "SCHEDULED" ? "bg-violet-300" : "bg-slate-300")} aria-hidden />
         <div className="flex flex-col gap-4 p-5 pl-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <p className="font-mono text-xs tracking-widest text-slate-400 uppercase">Long-Term Lease · Per Diem</p>
             <h1 className="mt-1 font-mono text-2xl font-semibold text-slate-900 sm:text-3xl">{lease.contractNumber}</h1>
             <p className="mt-0.5 text-slate-600">{lease.lesseeName}</p>
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {lease.status === "ACTIVE" ? <Badge tone="violet" dot>Действует</Badge> : <Badge tone="slate">Закрыт</Badge>}
+              {lease.status === "ACTIVE" ? <Badge tone="violet" dot>Действует</Badge> : lease.status === "SCHEDULED" ? <Badge tone="indigo">Ожидает On-Hire {formatDate(lease.startDate)}</Badge> : <Badge tone="slate">Закрыт</Badge>}
               <PaymentBadge status={lease.paymentStatus} />
               <LeaseExpiryBadge level={metrics.expiryLevel} daysToEnd={metrics.daysToEnd} />
               {lease.autoRenewal && <Badge tone="indigo"><Repeat /> Автопролонгация</Badge>}
@@ -48,9 +49,9 @@ export default async function LeaseDetailPage({ params }: { params: Params }) {
         </div>
         <div className="grid grid-cols-2 border-t border-slate-100 sm:grid-cols-4">
           <Stat label="Единиц на руках" value={`${metrics.activeUnits} / ${metrics.totalUnits}`} />
-          <Stat label="Per Diem" value={`${formatUsd(lease.dailyRateUsd, 2)}/сут.`} />
-          <Stat label="Начислено за месяц" value={formatUsd(Math.round(metrics.accruedThisMonthUsd))} />
-          <Stat label="Начислено за срок" value={formatUsd(Math.round(metrics.accruedTotalUsd))} strong />
+          <Stat label="Per Diem" value={`${formatUsd(metrics.currentRateUsd, 2)}/сут.`} />
+          <Stat label="Начислено за месяц" value={formatUsd(metrics.accruedThisMonthUsd, 2)} />
+          <Stat label="Начислено за срок" value={formatUsd(metrics.accruedTotalUsd, 2)} strong />
         </div>
       </Card>
 
@@ -70,7 +71,13 @@ export default async function LeaseDetailPage({ params }: { params: Params }) {
                   { label: "Плановый Off-Hire", value: formatDate(lease.endDate), mono: true },
                   { label: "Валюта", value: lease.currency },
                   { label: "Депозит", value: formatUsd(lease.depositUsd), mono: true },
-                  { label: "Доход в месяц (run-rate)", value: formatUsd(Math.round(metrics.monthlyRunRateUsd)), mono: true },
+                  { label: "Доход в месяц (run-rate)", value: formatUsd(metrics.monthlyRunRateUsd, 2), mono: true },
+                  {
+                    label: "История ставок Per Diem",
+                    value: lease.ratePeriods.map((p) => `${formatUsd(p.dailyRateUsd, 2)} с ${formatDate(p.effectiveFrom)}`).join(" → "),
+                    full: true,
+                    mono: true,
+                  },
                   { label: "Разрешённые регионы возврата", value: lease.allowedReturnLocodes.map((c) => `${c} · ${locodeCity(c)}`).join(", "), full: true },
                 ]}
               />

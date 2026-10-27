@@ -19,6 +19,7 @@ import { formatDate, formatDays, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { TripRow } from "@/lib/queries/operations";
 import type { IssuableContainer } from "@/lib/queries/containers";
+import { sumMoney } from "@/lib/money";
 
 type Tab = "open" | "hot" | "overdue" | "dispute" | "completed" | "all";
 
@@ -87,7 +88,7 @@ export function OneWayBoard({ trips, issuable, focusId }: OneWayBoardProps) {
   const detail = trips.find((t) => t.id === detailId) ?? null;
   const gateInTrip = trips.find((t) => t.id === gateInId) ?? null;
   const disputeTrip = trips.find((t) => t.id === disputeId) ?? null;
-  const detentionTotal = trips.filter((t) => t.timing.status === "OVERDUE").reduce((s, t) => s + t.timing.detentionUsd, 0);
+  const detentionTotal = sumMoney(trips.filter((t) => t.timing.status === "OVERDUE").map((t) => t.timing.detentionUsd));
 
   return (
     <>

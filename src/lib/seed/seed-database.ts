@@ -2,7 +2,8 @@
  * Генератор демо-данных. Используется и CLI-сидом (prisma/seed.ts), и кнопкой «Сбросить демо-данные».
  * Детерминирован (фиксированный seed PRNG), все даты — относительно `now`.
  */
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
+import type { AppPrismaClient, AppTransaction } from "@/lib/prisma";
 import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { addDays, addMonths, startOfDayUtc } from "@/lib/dates";
@@ -10,6 +11,7 @@ import { DEFAULT_ISO_CODE, DEFAULT_WEIGHTS, locodeCity, terminalsOf } from "@/li
 import { buildBic } from "@/lib/iso6346";
 import { formatDate } from "@/lib/format";
 import { rentalDaysInRange } from "@/lib/domain/lease";
+import { mulRate, roundMoney } from "@/lib/money";
 import {
   ACTIVE_TRIPS,
   CONTAINERS,
@@ -32,7 +34,7 @@ const ACTORS = {
   system: "Система FMS",
 } as const;
 
-type Tx = Prisma.TransactionClient;
+type Tx = AppTransaction;
 type EventDraft = Omit<Prisma.ContainerEventCreateManyInput, "containerId">;
 type Location = [locode: string, terminal: string];
 
@@ -305,7 +307,7 @@ function buildContainer(spec: ContainerSpec, ctx: BuildContext): ContainerBuild 
     );
     if (offHire) {
       // Как в offHireAction: аренда попадает в выручку при Off-Hire. Для единиц на руках её начислит будущий Off-Hire.
-      revenue += rentalDaysInRange({ onHireDate: onHire, offHireDate: offHire }, onHire, offHire) * lease.dailyRate;
+      revenue += mulRate(lease.dailyRate, rentalDaysInRange({ onHireDate: onHire, offHireDate: offHire }, onHire, offHire));
       events.push(
         { type: "LEASE_OFF_HIRE", occurredAt: new Date(offHire.getTime() + 13 * 3_600_000), locode, terminal, description: `Off-Hire: возвращен из аренды по договору ${lease.contractNumber}. Off-Hire Survey подписан, повреждений нет.`, actor: ACTORS.manager },
         { type: "GATE_IN", occurredAt: new Date(offHire.getTime() + 15 * 3_600_000), locode, terminal, description: "Gate-In на сток после возврата из аренды. Ожидает выдачи.", actor: ACTORS.edi },
@@ -364,7 +366,7 @@ function buildContainer(spec: ContainerSpec, ctx: BuildContext): ContainerBuild 
       purchaseDate,
       purchasePriceUsd: price,
       currentBookValueUsd: bookValue(price, purchaseDate, today),
-      totalRevenueUsd: Math.round(revenue * 100) / 100,
+      totalRevenueUsd: roundMoney(revenue),
       totalRepairCostUsd: history.repairCostUsd,
       notes: spec.notes ?? null,
     },
@@ -383,12 +385,13 @@ export interface SeedSummary {
 async function clearDomainData(tx: Tx): Promise<void> {
   await tx.containerEvent.deleteMany();
   await tx.leaseItem.deleteMany();
+  await tx.leaseRatePeriod.deleteMany();
   await tx.oneWayTrip.deleteMany();
   await tx.leaseContract.deleteMany();
   await tx.container.deleteMany();
 }
 
-export async function seedDatabase(prisma: PrismaClient, now: Date = new Date()): Promise<SeedSummary> {
+export async function seedDatabase(prisma: AppPrismaClient, now: Date = new Date()): Promise<SeedSummary> {
   const today = startOfDayUtc(now);
   const ctx: BuildContext = {
     rng: createRng(6346),
@@ -438,6 +441,7 @@ export async function seedDatabase(prisma: PrismaClient, now: Date = new Date())
 
   const leaseContracts: Prisma.LeaseContractCreateManyInput[] = [];
   const leaseItems: Prisma.LeaseItemCreateManyInput[] = [];
+  const ratePeriods: Prisma.LeaseRatePeriodCreateManyInput[] = [];
   for (const lease of LEASES) {
     const leaseId = randomUUID();
     const startDate = addDays(today, -lease.startDaysAgo);
@@ -462,6 +466,7 @@ export async function seedDatabase(prisma: PrismaClient, now: Date = new Date())
       status: lease.status,
       notes: lease.notes ?? null,
     });
+    ratePeriods.push({ leaseId, effectiveFrom: startDate, dailyRateUsd: lease.dailyRate });
     for (const key of lease.containerKeys) {
       leaseItems.push({
         leaseId,
@@ -491,6 +496,7 @@ export async function seedDatabase(prisma: PrismaClient, now: Date = new Date())
       await tx.oneWayTrip.createMany({ data: [...historyTrips, ...activeTrips] });
       await tx.leaseContract.createMany({ data: leaseContracts });
       await tx.leaseItem.createMany({ data: leaseItems });
+      await tx.leaseRatePeriod.createMany({ data: ratePeriods });
 
       return { containers: containers.length, events: events.length, oneWayTrips: historyTrips.length + activeTrips.length, leases: leaseContracts.length };
     },

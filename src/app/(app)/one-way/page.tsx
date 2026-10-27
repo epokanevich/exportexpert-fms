@@ -3,12 +3,13 @@ import { PageHeader } from "@/components/ui/primitives";
 import { OneWayBoard } from "@/components/one-way/one-way-board";
 import { getTripRows } from "@/lib/queries/operations";
 import { getIssuableContainers } from "@/lib/queries/containers";
+import { businessToday } from "@/lib/business-time";
 
 export const metadata: Metadata = { title: "Контроль One-Way" };
 
 export default async function OneWayPage({ searchParams }: { searchParams: Promise<{ focus?: string }> }) {
   const { focus } = await searchParams;
-  const now = new Date();
+  const now = businessToday();
   const [trips, issuable] = await Promise.all([getTripRows(now), getIssuableContainers()]);
 
   return (

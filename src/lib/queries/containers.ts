@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { businessToday } from "@/lib/business-time";
 import { attentionFlagsOf, issueBlockReason, unitEconomicsOf, type CscState } from "@/lib/domain/container";
 import { computeTripTiming, type TripTiming } from "@/lib/domain/one-way";
 import { locodeCity } from "@/lib/domain/constants";
@@ -48,11 +49,12 @@ const RECENT_EVENTS = 4;
 
 export async function getContainerRows(now: Date): Promise<ContainerRow[]> {
   const containers = await prisma.container.findMany({
+    where: { deletedAt: null },
     orderBy: { bicCode: "asc" },
     include: {
       events: { orderBy: { occurredAt: "desc" }, take: RECENT_EVENTS },
       oneWayTrips: { where: { status: "ACTIVE" }, take: 1 },
-      leaseItems: { where: { offHireDate: null, lease: { status: "ACTIVE" } }, include: { lease: true }, take: 1 },
+      leaseItems: { where: { offHireDate: null, lease: { status: { in: ["ACTIVE", "SCHEDULED"] } } }, include: { lease: true }, take: 1 },
     },
   });
 
@@ -103,7 +105,7 @@ export async function getContainerProfile(id: string) {
     include: {
       events: { orderBy: { occurredAt: "desc" } },
       oneWayTrips: { orderBy: { handoverDate: "desc" } },
-      leaseItems: { orderBy: { onHireDate: "desc" }, include: { lease: true } },
+      leaseItems: { orderBy: { onHireDate: "desc" }, include: { lease: { include: { ratePeriods: { orderBy: { effectiveFrom: "asc" } } } } } },
     },
   });
 }
@@ -125,9 +127,9 @@ export interface IssuableContainer {
  * Контейнеры на стоке — кандидаты на выдачу (One-Way / аренда).
  * Заблокированные (неисправен, просрочена КБК) возвращаются с причиной, чтобы форма показала её явно.
  */
-export async function getIssuableContainers(now: Date = new Date()): Promise<IssuableContainer[]> {
+export async function getIssuableContainers(now: Date = businessToday()): Promise<IssuableContainer[]> {
   const containers = await prisma.container.findMany({
-    where: { operationalStatus: "AVAILABLE" },
+    where: { operationalStatus: "AVAILABLE", deletedAt: null },
     orderBy: [{ currentLocode: "asc" }, { bicCode: "asc" }],
     select: { id: true, bicCode: true, sizeType: true, currentLocode: true, currentTerminal: true, conditionGrade: true, operationalStatus: true, techStatus: true, cscPlateExpiry: true },
   });

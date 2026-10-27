@@ -1,3 +1,4 @@
+import { sumMoney } from "@/lib/money";
 import { attentionFlagsOf, type AttentionInput } from "./container";
 import { computeLeaseMetrics, type LeaseInput } from "./lease";
 import { computeTripTiming, type TripTimingInput } from "./one-way";
@@ -55,7 +56,7 @@ export function computeFleetKpi(
     })
     .filter((r) => r.units > 0);
 
-  const byStatus = OPERATIONAL_STATUSES.map((status) => ({
+  const byStatus = OPERATIONAL_STATUSES.filter((status) => status !== "WRITTEN_OFF").map((status) => ({
     status,
     units: containers.filter((c) => c.operationalStatus === status).length,
   }));
@@ -69,12 +70,12 @@ export function computeFleetKpi(
       active: openTrips.length,
       hot: openTrips.filter((t) => t.isHot).length,
       overdue: openTrips.filter((t) => t.status === "OVERDUE").length,
-      detentionUsd: openTrips.reduce((s, t) => s + t.detentionUsd, 0),
+      detentionUsd: sumMoney(openTrips.map((t) => t.detentionUsd)),
     },
     lease: {
       activeContracts: leaseMetrics.length,
       unitsOnHire: leaseMetrics.reduce((s, m) => s + m.activeUnits, 0),
-      monthlyRevenueUsd: leaseMetrics.reduce((s, m) => s + m.monthlyRunRateUsd, 0),
+      monthlyRevenueUsd: sumMoney(leaseMetrics.map((m) => m.monthlyRunRateUsd)),
       attention: leaseMetrics.filter((m) => m.needsAttention).length,
     },
     attention: {

@@ -10,6 +10,8 @@ export const STATUS_COLORS: Record<OperationalStatus, string> = {
   LONG_TERM_LEASE: "#8b5cf6",
   IN_TRANSIT: "#0ea5e9",
   MAINTENANCE: "#f97316",
+  RESERVED: "#a78bfa",
+  WRITTEN_OFF: "#94a3b8",
 };
 
 interface RegionChartProps {

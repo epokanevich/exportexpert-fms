@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { addMonths, latestBusinessDate, toLocalDateInput } from "./dates";
+import { addMonths, toLocalDateInput } from "./dates";
+import { latestBusinessDate } from "./business-time";
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 

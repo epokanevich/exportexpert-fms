@@ -67,8 +67,10 @@ export const OPERATIONAL_STATUSES = [
   "AVAILABLE",
   "ONE_WAY",
   "LONG_TERM_LEASE",
+  "RESERVED",
   "IN_TRANSIT",
   "MAINTENANCE",
+  "WRITTEN_OFF",
 ] as const;
 export type OperationalStatus = (typeof OPERATIONAL_STATUSES)[number];
 export const OPERATIONAL_STATUS_LABELS: Record<OperationalStatus, string> = {
@@ -77,7 +79,13 @@ export const OPERATIONAL_STATUS_LABELS: Record<OperationalStatus, string> = {
   LONG_TERM_LEASE: "Долгосрочная аренда",
   IN_TRANSIT: "В собственном рейсе",
   MAINTENANCE: "На ремонте",
+  RESERVED: "Резерв под аренду",
+  WRITTEN_OFF: "Списан",
 };
+/** Статусы, которые назначаются только операциями (One-Way, аренда, списание), но не формой «Изменить». */
+export const MANAGED_OPERATIONAL_STATUSES: readonly OperationalStatus[] = ["ONE_WAY", "LONG_TERM_LEASE", "RESERVED", "WRITTEN_OFF"];
+/** Статусы, которые можно выбрать в карточке контейнера вручную. */
+export const EDITABLE_OPERATIONAL_STATUSES = ["AVAILABLE", "IN_TRANSIT", "MAINTENANCE"] as const;
 /** Статусы, в которых контейнер приносит доход / задействован. */
 export const UTILIZED_STATUSES: readonly OperationalStatus[] = ["ONE_WAY", "LONG_TERM_LEASE", "IN_TRANSIT"];
 
@@ -106,8 +114,10 @@ export const SURVEY_STATUS_LABELS: Record<string, string> = {
   SIGNED: "Подписан",
 };
 
-export const LEASE_STATUSES = ["ACTIVE", "COMPLETED"] as const;
+/** SCHEDULED — договор оформлен, дата On-Hire ещё не наступила (D-19). */
+export const LEASE_STATUSES = ["SCHEDULED", "ACTIVE", "COMPLETED"] as const;
 export type LeaseStatus = (typeof LEASE_STATUSES)[number];
+export const LEASE_STATUS_LABELS: Record<LeaseStatus, string> = { SCHEDULED: "Ожидает On-Hire", ACTIVE: "Действует", COMPLETED: "Закрыт" };
 
 export const EVENT_TYPES = [
   "PURCHASE",
@@ -123,8 +133,12 @@ export const EVENT_TYPES = [
   "REPAIR_DONE",
   "STATUS_CHANGE",
   "CSC_RENEWAL",
+  "WRITE_OFF",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
+/** Типы, которые можно записать в журнал вручную: покупка и списание создаются только своими операциями. */
+export const MANUAL_EVENT_TYPES = EVENT_TYPES.filter((t): t is Exclude<EventType, "PURCHASE" | "WRITE_OFF"> => t !== "PURCHASE" && t !== "WRITE_OFF");
+export type ManualEventType = (typeof MANUAL_EVENT_TYPES)[number];
 export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   PURCHASE: "Покупка / ввод в парк",
   GATE_IN: "Gate-In",
@@ -139,6 +153,7 @@ export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   REPAIR_DONE: "Ремонт завершен",
   STATUS_CHANGE: "Смена статуса",
   CSC_RENEWAL: "Продление КБК (CSC)",
+  WRITE_OFF: "Списание из парка",
 };
 
 /** UN/LOCODE, с которыми работает компания. */
@@ -171,6 +186,9 @@ export function locodeRegion(code: string): string {
 export function terminalsOf(code: string): readonly string[] {
   return LOCATION_BY_CODE.get(code)?.terminals ?? [];
 }
+
+/** Верхняя граница пакета в одном договоре/возврате (D-30): защищает от запроса на тысячи id. */
+export const MAX_LEASE_UNITS = 200;
 
 /** Пороги контроля. */
 export const THRESHOLDS = {

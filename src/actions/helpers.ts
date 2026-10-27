@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/auth/dal";
 import type { SessionPayload } from "@/lib/auth/session";
 import { can, type Permission } from "@/lib/auth/permissions";
 import { parseDateInput } from "@/lib/dates";
+import { describeDbError } from "@/lib/db-errors";
 import type { ActionResult } from "./types";
 
 export type Parsed<T> = { ok: true; data: T } | { ok: false; result: ActionResult };
@@ -74,8 +75,9 @@ export const innField = z
  */
 export function serverError(context: string, error: unknown): ActionResult {
   if (error instanceof ConflictError) return { ok: false, error: error.message };
-  const code = typeof error === "object" && error !== null && "code" in error ? String((error as { code: unknown }).code) : null;
-  if (code === "P2002") return { ok: false, error: "Запись с таким номером уже существует" };
+  // Нарушение уникальности/CHECK/RESTRICT — ожидаемая ситуация (гонка, двойной клик): понятный текст вместо 500.
+  const known = describeDbError(error);
+  if (known) return { ok: false, error: known };
   console.error(`[action:${context}]`, error);
   return { ok: false, error: "Не удалось сохранить изменения. Повторите попытку или обратитесь к администратору." };
 }

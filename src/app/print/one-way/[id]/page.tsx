@@ -8,6 +8,8 @@ import { computeTripTiming } from "@/lib/domain/one-way";
 import { SIZE_TYPE_LABELS, TRIP_STATUS_LABELS, isOneOf, SIZE_TYPES, locodeCity } from "@/lib/domain/constants";
 import { formatBic } from "@/lib/iso6346";
 import { formatDate, formatDateTime, formatDays, formatNumber, formatUsd } from "@/lib/format";
+import { businessToday } from "@/lib/business-time";
+import { mulRate } from "@/lib/money";
 
 type Params = Promise<{ id: string }>;
 
@@ -32,7 +34,7 @@ export default async function ReleaseOrderPage({ params }: { params: Params }) {
   const trip = await getTrip(id);
   if (!trip) notFound();
 
-  const now = new Date();
+  const now = businessToday();
   const timing = computeTripTiming(trip, now);
   const { container } = trip;
   const sizeLabel = isOneOf(SIZE_TYPES, container.sizeType) ? SIZE_TYPE_LABELS[container.sizeType] : container.sizeType;
@@ -116,7 +118,7 @@ export default async function ReleaseOrderPage({ params }: { params: Params }) {
           </section>
           <p className="mt-2 text-xs text-slate-600">
             Пример начисления детеншна:{" "}
-            {DETENTION_EXAMPLES.map((d) => `${formatDays(d)} — ${formatUsd(d * trip.detentionRatePerDayUsd)}`).join(" · ")}.
+            {DETENTION_EXAMPLES.map((d) => `${formatDays(d)} — ${formatUsd(mulRate(trip.detentionRatePerDayUsd, d))}`).join(" · ")}.
           </p>
 
           {/* Условия */}

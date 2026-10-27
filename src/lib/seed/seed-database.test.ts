@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import type { PrismaClient } from "@prisma/client";
+import type { AppPrismaClient } from "@/lib/prisma";
 import { validateBic } from "@/lib/iso6346";
 import { seedDatabase } from "./seed-database";
 
@@ -7,7 +7,7 @@ type Row = Record<string, unknown>;
 
 /** Фейковый Prisma-клиент: собирает всё, что сид записал бы в БД, без подключения к ней. */
 function createFakePrisma() {
-  const written: Record<string, Row[]> = { container: [], containerEvent: [], oneWayTrip: [], leaseContract: [], leaseItem: [], user: [] };
+  const written: Record<string, Row[]> = { container: [], containerEvent: [], oneWayTrip: [], leaseContract: [], leaseItem: [], leaseRatePeriod: [], user: [] };
   const queries: string[] = [];
   const model = (name: string) => ({
     deleteMany: vi.fn(async () => queries.push(`${name}.deleteMany`)),
@@ -28,10 +28,11 @@ function createFakePrisma() {
     oneWayTrip: model("oneWayTrip"),
     leaseContract: model("leaseContract"),
     leaseItem: model("leaseItem"),
+    leaseRatePeriod: model("leaseRatePeriod"),
     user: model("user"),
   };
   const prisma = { $transaction: vi.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)) };
-  return { prisma: prisma as unknown as PrismaClient, written, queries };
+  return { prisma: prisma as unknown as AppPrismaClient, written, queries };
 }
 
 describe("seedDatabase (batched)", () => {
@@ -87,5 +88,16 @@ describe("seedDatabase (batched)", () => {
     expect(written.oneWayTrip.filter((t) => t.status === "DISPUTE")).toHaveLength(1);
     expect(written.leaseContract.filter((l) => l.status === "ACTIVE")).toHaveLength(4);
     expect(written.user.map((u) => u.email)).toContain("admin@exportexpert.ru");
+  });
+
+  test("every lease starts with one Per Diem rate period from its On-Hire date", async () => {
+    const { prisma, written } = createFakePrisma();
+    await seedDatabase(prisma, new Date("2026-10-26T12:00:00.000Z"));
+
+    expect(written.leaseRatePeriod).toHaveLength(written.leaseContract.length);
+    for (const lease of written.leaseContract) {
+      const period = written.leaseRatePeriod.find((p) => p.leaseId === lease.id);
+      expect(period).toMatchObject({ effectiveFrom: lease.startDate, dailyRateUsd: lease.dailyRateUsd });
+    }
   });
 });

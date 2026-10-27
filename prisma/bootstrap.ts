@@ -3,11 +3,11 @@
  * Идемпотентно: если в базе уже есть контейнеры или пользователи — ничего не делает,
  * поэтому повторные деплои не затирают рабочие данные.
  */
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "../src/lib/prisma";
 import { seedDatabase } from "../src/lib/seed/seed-database";
 
 async function main(): Promise<void> {
-  const prisma = new PrismaClient();
+  const prisma = createPrismaClient();
   try {
     const [containers, users] = await Promise.all([prisma.container.count(), prisma.user.count()]);
     if (containers > 0 || users > 0) {

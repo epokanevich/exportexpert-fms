@@ -5,19 +5,21 @@ import { Badge, Card, CardContent, CardHeader, PageHeader, Progress } from "@/co
 import { BicCode, LeaseExpiryBadge, PaymentBadge } from "@/components/status-badges";
 import { RegionChart, StatusChart } from "@/components/dashboard/fleet-charts";
 import { prisma } from "@/lib/prisma";
+import { sumMoney } from "@/lib/money";
 import { computeFleetKpi } from "@/lib/domain/fleet";
 import { getContainerRows } from "@/lib/queries/containers";
 import { getLeaseRows, getTripRows } from "@/lib/queries/operations";
 import { locodeCity, teuOf } from "@/lib/domain/constants";
 import { formatDateShort, formatDays, formatPercent, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { businessToday } from "@/lib/business-time";
 
 export const metadata: Metadata = { title: "Дашборд" };
 
 export default async function DashboardPage() {
-  const now = new Date();
+  const now = businessToday();
   const [containers, activeTrips, trips, leases, rows] = await Promise.all([
-    prisma.container.findMany(),
+    prisma.container.findMany({ where: { deletedAt: null } }),
     prisma.oneWayTrip.findMany({ where: { status: "ACTIVE" } }),
     getTripRows(now),
     getLeaseRows(now),
@@ -32,11 +34,11 @@ export default async function DashboardPage() {
   const leaseAlerts = leases.filter((l) => l.metrics.needsAttention);
   const fleetAlerts = rows.filter((r) => r.needsAttention).slice(0, 8);
   const economics = {
-    revenue: containers.reduce((s, c) => s + c.totalRevenueUsd, 0),
-    book: containers.reduce((s, c) => s + c.currentBookValueUsd, 0),
-    repairs: containers.reduce((s, c) => s + c.totalRepairCostUsd, 0),
-    eorPending: containers.reduce((s, c) => s + (c.eorAmountUsd ?? 0), 0),
-    storagePerDay: containers.filter((c) => c.operationalStatus === "AVAILABLE").reduce((s, c) => s + (c.storageRatePerDayUsd ?? 0), 0),
+    revenue: sumMoney(containers.map((c) => c.totalRevenueUsd)),
+    book: sumMoney(containers.map((c) => c.currentBookValueUsd)),
+    repairs: sumMoney(containers.map((c) => c.totalRepairCostUsd)),
+    eorPending: sumMoney(containers.map((c) => c.eorAmountUsd ?? 0)),
+    storagePerDay: sumMoney(containers.filter((c) => c.operationalStatus === "AVAILABLE").map((c) => c.storageRatePerDayUsd ?? 0)),
   };
 
   return (

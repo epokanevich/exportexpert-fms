@@ -7,10 +7,11 @@ const { prismaMock, tx, session } = vi.hoisted(() => {
     containerEvent: { create: vi.fn(), createMany: vi.fn() },
     leaseItem: { updateMany: vi.fn() },
     leaseContract: { create: vi.fn(), update: vi.fn() },
+    leaseRatePeriod: { upsert: vi.fn() },
   };
   const prismaMock = {
     user: { findUnique: vi.fn() },
-    container: { findUnique: vi.fn(), findMany: vi.fn(), delete: vi.fn(), update: vi.fn() },
+    container: { findUnique: vi.fn(), findMany: vi.fn(), delete: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     oneWayTrip: { findUnique: vi.fn(), findFirst: vi.fn() },
     leaseContract: { findUnique: vi.fn(), update: vi.fn() },
     containerEvent: { createMany: vi.fn() },
@@ -63,7 +64,7 @@ afterEach(() => {
 describe("role checks on the server", () => {
   test("INSPECTOR cannot write off a container", async () => {
     actAs("INSPECTOR");
-    const result = await deleteContainerAction("c1");
+    const result = await deleteContainerAction("c1", { reason: "Списание" });
     expect(result.ok).toBe(false);
     expect(prismaMock.container.findUnique).not.toHaveBeenCalled();
     expect(prismaMock.container.delete).not.toHaveBeenCalled();
@@ -71,7 +72,7 @@ describe("role checks on the server", () => {
 
   test("MANAGER cannot write off a container either (ADMIN only)", async () => {
     actAs("MANAGER");
-    const result = await deleteContainerAction("c1");
+    const result = await deleteContainerAction("c1", { reason: "Списание" });
     expect(result.ok).toBe(false);
     expect(prismaMock.container.delete).not.toHaveBeenCalled();
   });
@@ -88,8 +89,41 @@ describe("role checks on the server", () => {
 
   test("a user deleted from the database loses access even with a valid token", async () => {
     prismaMock.user.findUnique.mockResolvedValue(null);
-    const result = await deleteContainerAction("c1");
+    const result = await deleteContainerAction("c1", { reason: "Списание" });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("write-off is a soft delete (1.3)", () => {
+  const onStock = { id: "c1", bicCode: "TKRU2048121", operationalStatus: "AVAILABLE", deletedAt: null, currentLocode: "RUVVO", currentTerminal: "ВМТП" };
+
+  test("ADMIN write-off keeps the container and its history: status WRITTEN_OFF + deletedAt, no DELETE", async () => {
+    prismaMock.container.findUnique.mockResolvedValue(onStock);
+    prismaMock.oneWayTrip.findFirst.mockResolvedValue(null);
+    tx.container.updateMany.mockResolvedValue({ count: 1 });
+
+    const result = await deleteContainerAction("c1", { reason: "Коррозия рамы, восстановление нерентабельно" });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(prismaMock.container.delete).not.toHaveBeenCalled();
+    expect(tx.container.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "c1", deletedAt: null, operationalStatus: { in: ["AVAILABLE", "MAINTENANCE", "IN_TRANSIT"] } },
+      data: expect.objectContaining({ operationalStatus: "WRITTEN_OFF", deletedAt: expect.any(Date) }),
+    }));
+    expect(tx.containerEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: "WRITE_OFF" }) }));
+  });
+
+  test("a write-off requires a reason", async () => {
+    const result = await deleteContainerAction("c1", { reason: "" });
+    expect(result.ok).toBe(false);
+    expect(tx.container.updateMany).not.toHaveBeenCalled();
+  });
+
+  test("an already written-off container cannot be written off twice", async () => {
+    prismaMock.container.findUnique.mockResolvedValue({ ...onStock, operationalStatus: "WRITTEN_OFF", deletedAt: new Date() });
+    const result = await deleteContainerAction("c1", { reason: "Повтор" });
+    expect(result.ok).toBe(false);
+    expect(tx.container.updateMany).not.toHaveBeenCalled();
   });
 });
 
@@ -135,7 +169,7 @@ describe("check-then-act races are closed inside the transaction", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-26T12:00:00.000Z"));
     prismaMock.leaseContract.findUnique.mockResolvedValue({
-      id: "l1", contractNumber: "LC-1", allowedReturnLocodes: "RULED", dailyRateUsd: 2.5,
+      id: "l1", contractNumber: "LC-1", allowedReturnLocodes: "RULED", dailyRateUsd: 2.5, status: "ACTIVE", startDate: d("2026-05-09"), ratePeriods: [],
       items: [{ id: "i1", containerId: "c1", onHireDate: d("2026-05-09"), offHireDate: null, container: { techStatus: "SOUND", conditionGrade: "CW", eorAmountUsd: null } }],
     });
     tx.leaseItem.updateMany.mockResolvedValue({ count: 0 });
@@ -171,13 +205,64 @@ describe("business dates", () => {
   });
 });
 
-describe("lease extension", () => {
-  test("refuses a new Per Diem rate: it would be applied retroactively to days already accrued", async () => {
-    prismaMock.leaseContract.findUnique.mockResolvedValue({ id: "l1", status: "ACTIVE", contractNumber: "LC-1", endDate: d("2026-11-05"), dailyRateUsd: 2.5, items: [] });
+describe("lease extension with a new Per Diem rate (D-08)", () => {
+  const lease = {
+    id: "l1", status: "ACTIVE", contractNumber: "LC-1", startDate: d("2026-01-01"), endDate: d("2026-11-05"), dailyRateUsd: 4,
+    ratePeriods: [{ effectiveFrom: d("2026-01-01"), dailyRateUsd: 4 }], items: [],
+  };
 
-    const result = await extendLeaseAction("l1", { months: 6, newDailyRateUsd: 3.1 });
+  test("a new rate starts a rate period from the given date; earlier days keep the old rate", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-02T09:00:00.000Z"));
+    prismaMock.leaseContract.findUnique.mockResolvedValue(lease);
+
+    const result = await extendLeaseAction("l1", { months: 6, newDailyRateUsd: 6, rateEffectiveFrom: "2026-07-02" });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(tx.leaseRatePeriod.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { leaseId_effectiveFrom: { leaseId: "l1", effectiveFrom: d("2026-07-02") } },
+      create: expect.objectContaining({ leaseId: "l1", dailyRateUsd: "6.00" }),
+    }));
+    expect(tx.leaseContract.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ dailyRateUsd: "6.00" }) }));
+  });
+
+  test("refuses a retroactive rate: days already accrued are never re-priced", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-02T09:00:00.000Z"));
+    prismaMock.leaseContract.findUnique.mockResolvedValue(lease);
+
+    const result = await extendLeaseAction("l1", { months: 6, newDailyRateUsd: 6, rateEffectiveFrom: "2026-06-01" });
 
     expect(result.ok).toBe(false);
-    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    expect(tx.leaseRatePeriod.upsert).not.toHaveBeenCalled();
+  });
+
+  test("extension without a new rate keeps the rate history untouched", async () => {
+    prismaMock.leaseContract.findUnique.mockResolvedValue(lease);
+
+    const result = await extendLeaseAction("l1", { months: 3 });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(tx.leaseRatePeriod.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("Off-Hire books rent by rate periods", () => {
+  test("273 days: 182 × $4 + 91 × $6 = $1 274 goes to revenue, not 273 × $6", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-26T12:00:00.000Z"));
+    prismaMock.leaseContract.findUnique.mockResolvedValue({
+      id: "l1", contractNumber: "LC-1", allowedReturnLocodes: "RULED", dailyRateUsd: 6, status: "ACTIVE", startDate: d("2026-01-01"),
+      ratePeriods: [{ effectiveFrom: d("2026-01-01"), dailyRateUsd: 4 }, { effectiveFrom: d("2026-07-02"), dailyRateUsd: 6 }],
+      items: [{ id: "i1", containerId: "c1", onHireDate: d("2026-01-01"), offHireDate: null, container: { techStatus: "SOUND", conditionGrade: "CW", eorAmountUsd: null } }],
+    });
+    tx.leaseItem.updateMany.mockResolvedValue({ count: 1 });
+
+    const result = await offHireAction("l1", { itemIds: ["i1"], returnDate: "2026-10-01", returnLocode: "RULED", terminal: "ПКТ", condition: "SOUND" });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(tx.container.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ totalRevenueUsd: { increment: "1274.00" } }),
+    }));
   });
 });

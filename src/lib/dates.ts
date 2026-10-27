@@ -22,17 +22,6 @@ export function addMonths(date: Date, months: number): Date {
   return target;
 }
 
-/** Восточный край работы компании — Владивосток (UTC+10). */
-const EASTERNMOST_UTC_OFFSET_HOURS = 10;
-
-/**
- * Последняя календарная дата, которая уже наступила хотя бы у одного пользователя.
- * Сервер работает в UTC: без этого во Владивостоке до 10:00 «сегодня» отклонялось бы как дата в будущем.
- */
-export function latestBusinessDate(now: Date): Date {
-  return startOfDayUtc(new Date(now.getTime() + EASTERNMOST_UTC_OFFSET_HOURS * 3_600_000));
-}
-
 /** Сегодняшняя дата по часам пользователя → "2026-10-27" для <input type="date"> (только клиентский код). */
 export function toLocalDateInput(date: Date = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, "0");

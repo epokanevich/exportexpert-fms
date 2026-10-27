@@ -1,4 +1,5 @@
 import { diffDays } from "@/lib/dates";
+import { mulRate, roundMoney, sumMoney } from "@/lib/money";
 import { TECH_STATUS_LABELS, TECH_STATUSES, THRESHOLDS, isOneOf } from "./constants";
 
 export type CscLevel = "EXPIRED" | "EXPIRING" | "OK";
@@ -59,7 +60,7 @@ export function storageStateOf(container: StorageInput, now: Date): StorageState
   return {
     idleDays,
     isIdleTooLong: idleDays > THRESHOLDS.idleStockDays,
-    storageCostUsd: idleDays * (container.storageRatePerDayUsd ?? 0),
+    storageCostUsd: mulRate(container.storageRatePerDayUsd ?? 0, idleDays),
   };
 }
 
@@ -81,10 +82,10 @@ export interface UnitEconomics {
 }
 
 export function unitEconomicsOf(c: EconomicsInput): UnitEconomics {
-  const depreciationUsd = Math.max(0, c.purchasePriceUsd - c.currentBookValueUsd);
-  const netResultUsd = c.totalRevenueUsd - c.totalRepairCostUsd - depreciationUsd;
+  const depreciationUsd = Math.max(0, sumMoney([c.purchasePriceUsd, -c.currentBookValueUsd]));
+  const netResultUsd = sumMoney([c.totalRevenueUsd, -c.totalRepairCostUsd, -depreciationUsd]);
   const roi = c.purchasePriceUsd > 0 ? netResultUsd / c.purchasePriceUsd : 0;
-  const paybackRatio = c.purchasePriceUsd > 0 ? (c.totalRevenueUsd - c.totalRepairCostUsd) / c.purchasePriceUsd : 0;
+  const paybackRatio = c.purchasePriceUsd > 0 ? roundMoney(c.totalRevenueUsd - c.totalRepairCostUsd) / c.purchasePriceUsd : 0;
   return { depreciationUsd, netResultUsd, roi, paybackRatio };
 }
 

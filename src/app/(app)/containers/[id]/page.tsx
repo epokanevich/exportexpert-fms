@@ -12,12 +12,13 @@ import type { ContainerFormValues } from "@/components/containers/container-form
 import { getContainerProfile } from "@/lib/queries/containers";
 import { attentionFlagsOf, unitEconomicsOf } from "@/lib/domain/container";
 import { computeTripTiming } from "@/lib/domain/one-way";
-import { rentalDaysInRange } from "@/lib/domain/lease";
+import { accrueItem } from "@/lib/domain/lease";
 import { CONDITION_GRADE_LABELS, SIZE_TYPE_LABELS, isOneOf, CONDITION_GRADES, SIZE_TYPES, locodeCity, teuOf } from "@/lib/domain/constants";
 import { formatBic } from "@/lib/iso6346";
 import { toDateInput } from "@/lib/dates";
 import { formatDate, formatDays, formatNumber, formatPercent, formatUsd, plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { businessToday } from "@/lib/business-time";
 
 type Params = Promise<{ id: string }>;
 
@@ -32,12 +33,13 @@ export default async function ContainerProfilePage({ params }: { params: Params 
   const [session, c] = await Promise.all([requireSession(), getContainerProfile(id)]);
   if (!c) notFound();
 
-  const now = new Date();
+  const now = businessToday();
   const flags = attentionFlagsOf(c, now);
   const economics = unitEconomicsOf(c);
   const activeTrip = c.oneWayTrips.find((t) => t.status === "ACTIVE");
   const hasOpenDispute = c.oneWayTrips.some((t) => t.status === "DISPUTE");
-  const activeLease = c.leaseItems.find((i) => !i.offHireDate && i.lease.status === "ACTIVE");
+  const activeLease = c.leaseItems.find((i) => !i.offHireDate && i.lease.status !== "COMPLETED");
+  const isWrittenOff = c.deletedAt !== null;
   const tripTiming = activeTrip ? computeTripTiming(activeTrip, now) : null;
   const ageYears = now.getUTCFullYear() - c.manufactureYear;
 
@@ -72,7 +74,7 @@ export default async function ContainerProfilePage({ params }: { params: Params 
 
       {/* Шапка профиля */}
       <Card className="relative mb-4 overflow-hidden lg:mb-6">
-        <div className="absolute inset-y-0 left-0 w-1.5 bg-indigo-600" aria-hidden />
+        <div className={cn("absolute inset-y-0 left-0 w-1.5", isWrittenOff ? "bg-slate-400" : "bg-indigo-600")} aria-hidden />
         <div className="flex flex-col gap-4 p-5 pl-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="font-mono text-xs tracking-widest text-slate-400 uppercase">
@@ -89,8 +91,15 @@ export default async function ContainerProfilePage({ params }: { params: Params 
               {flags.storage.isIdleTooLong && <Badge tone="violet">Простой {formatDays(flags.storage.idleDays ?? 0)}</Badge>}
             </div>
           </div>
-          <ContainerProfileActions containerId={c.id} bicLabel={formatBic(c.bicCode)} formValues={formValues} canDelete={!activeTrip && !activeLease && !hasOpenDispute} canEdit={can(session.role, "fleet:edit")} canWriteOff={can(session.role, "fleet:delete")} />
+          {!isWrittenOff && (
+            <ContainerProfileActions containerId={c.id} bicLabel={formatBic(c.bicCode)} formValues={formValues} canDelete={!activeTrip && !activeLease && !hasOpenDispute} canEdit={can(session.role, "fleet:edit")} canWriteOff={can(session.role, "fleet:delete")} />
+          )}
         </div>
+        {isWrittenOff && c.deletedAt && (
+          <div role="status" className="border-t border-slate-200 bg-slate-100 px-5 py-3 pl-6 text-sm text-slate-700">
+            Списан {formatDate(c.deletedAt)}. Карточка доступна только для просмотра; история и договоры сохранены.
+          </div>
+        )}
         {(activeTrip || activeLease) && (
           <div className="border-t border-slate-100 bg-indigo-50/50 px-5 py-3 pl-6 text-sm">
             {activeTrip && tripTiming && (
@@ -236,7 +245,7 @@ export default async function ContainerProfilePage({ params }: { params: Params 
                         <p className="truncate text-xs text-slate-500">{item.lease.lesseeName} · {formatDate(item.onHireDate)} — {item.offHireDate ? formatDate(item.offHireDate) : "н.в."}</p>
                       </div>
                       <span className="font-mono text-xs text-slate-600">
-                        {formatUsd(rentalDaysInRange(item, item.onHireDate, now) * item.lease.dailyRateUsd)}
+                        {formatUsd(accrueItem(item, item.lease.ratePeriods, item.onHireDate, now).amountUsd, 2)}
                       </span>
                     </Link>
                   </li>

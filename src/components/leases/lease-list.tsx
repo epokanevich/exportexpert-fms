@@ -11,6 +11,7 @@ import { ExportCsvButton } from "@/components/export-csv-button";
 import { LEASE_CSV_COLUMNS } from "@/lib/export-columns";
 import { NewLeaseForm } from "./lease-forms";
 import { formatDate, formatUsd } from "@/lib/format";
+import { sumMoney } from "@/lib/money";
 import { locodeCity } from "@/lib/domain/constants";
 import { cn } from "@/lib/utils";
 import type { LeaseRow } from "@/lib/queries/operations";
@@ -30,7 +31,7 @@ function inTab(l: LeaseRow, tab: Tab): boolean {
   const active = l.status === "ACTIVE";
   switch (tab) {
     case "active":
-      return active;
+      return active || l.status === "SCHEDULED";
     case "attention":
       return active && l.metrics.needsAttention;
     case "expiring":
@@ -38,7 +39,7 @@ function inTab(l: LeaseRow, tab: Tab): boolean {
     case "debt":
       return active && l.paymentStatus === "OVERDUE";
     case "completed":
-      return !active;
+      return l.status === "COMPLETED";
   }
 }
 
@@ -50,9 +51,9 @@ export function LeaseList({ leases, issuable }: { leases: LeaseRow[]; issuable: 
   const active = leases.filter((l) => l.status === "ACTIVE");
   const totals = {
     units: active.reduce((s, l) => s + l.metrics.activeUnits, 0),
-    monthly: active.reduce((s, l) => s + l.metrics.monthlyRunRateUsd, 0),
-    accruedMonth: active.reduce((s, l) => s + l.metrics.accruedThisMonthUsd, 0),
-    accruedTotal: leases.reduce((s, l) => s + l.metrics.accruedTotalUsd, 0),
+    monthly: sumMoney(active.map((l) => l.metrics.monthlyRunRateUsd)),
+    accruedMonth: sumMoney(active.map((l) => l.metrics.accruedThisMonthUsd)),
+    accruedTotal: sumMoney(leases.map((l) => l.metrics.accruedTotalUsd)),
   };
 
   const visible = useMemo(() => {

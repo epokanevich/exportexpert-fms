@@ -7,14 +7,14 @@ import { validateBic, formatBic } from "@/lib/iso6346";
 import { startOfDayUtc } from "@/lib/dates";
 import {
   CONDITION_GRADES,
-  EVENT_TYPES,
+  MANUAL_EVENT_TYPES,
   OPERATIONAL_STATUSES,
   SIZE_TYPES,
   TECH_STATUSES,
   OPERATIONAL_STATUS_LABELS,
   TECH_STATUS_LABELS,
 } from "@/lib/domain/constants";
-import { authorize, dateField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
+import { authorize, ConflictError, dateField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
 import type { ActionResult } from "./types";
 
 const baseContainerSchema = z.object({
@@ -163,25 +163,63 @@ export async function updateContainerAction(id: string, input: ContainerInput): 
   }
 }
 
-export async function deleteContainerAction(id: string): Promise<ActionResult> {
+const writeOffSchema = z.object({ reason: requiredText("причина списания", 500) });
+
+/** Статусы, из которых контейнер можно списать: он на территории компании и не в операции. */
+const WRITE_OFF_FROM = ["AVAILABLE", "MAINTENANCE", "IN_TRANSIT"];
+
+/**
+ * Списание (1.3) — мягкое удаление: статус WRITTEN_OFF + deletedAt. Журнал, рейсы и договоры сохраняются,
+ * в реестре единица видна только в фильтре «Списанные». Физическое удаление запрещено и на уровне БД (RESTRICT).
+ */
+export async function deleteContainerAction(id: string, input: z.input<typeof writeOffSchema>): Promise<ActionResult> {
   const auth = await authorize("fleet:delete");
   if (!auth.ok) return auth.result;
-  const container = await prisma.container.findUnique({ where: { id }, select: { bicCode: true, operationalStatus: true } });
+  const { session } = auth;
+  const parsed = parseInput(writeOffSchema, input);
+  if (!parsed.ok) return parsed.result;
+  const container = await prisma.container.findUnique({
+    where: { id },
+    select: { bicCode: true, operationalStatus: true, deletedAt: true, currentLocode: true, currentTerminal: true },
+  });
   if (!container) return notFound("Контейнер");
-  if (MANAGED_STATUSES.has(container.operationalStatus)) {
-    return { ok: false, error: "Нельзя удалить контейнер в активном One-Way или аренде — сначала оформите возврат" };
+  if (container.deletedAt) return { ok: false, error: `${formatBic(container.bicCode)} уже списан` };
+  if (!WRITE_OFF_FROM.includes(container.operationalStatus)) {
+    return { ok: false, error: "Нельзя списать контейнер в активном One-Way, аренде или резерве — сначала оформите возврат" };
   }
   const openTrip = await prisma.oneWayTrip.findFirst({ where: { containerId: id, status: { in: ["ACTIVE", "DISPUTE"] } }, select: { bookingRef: true } });
   if (openTrip) {
     return { ok: false, error: `По рейсу One-Way ${openTrip.bookingRef} есть незакрытая претензия — сначала урегулируйте её` };
   }
-  await prisma.container.delete({ where: { id } });
+  const now = new Date();
+  try {
+    await prisma.$transaction(async (tx) => {
+      const written = await tx.container.updateMany({
+        where: { id, deletedAt: null, operationalStatus: { in: WRITE_OFF_FROM } },
+        data: { operationalStatus: "WRITTEN_OFF", deletedAt: now, storageStartDate: null },
+      });
+      if (written.count === 0) throw new ConflictError(`${formatBic(container.bicCode)} уже списан или выдан — обновите страницу`);
+      await tx.containerEvent.create({
+        data: {
+          containerId: id,
+          type: "WRITE_OFF",
+          occurredAt: now,
+          locode: container.currentLocode,
+          terminal: container.currentTerminal,
+          description: `Списан из парка. Причина: ${parsed.data.reason}`,
+          actor: session.name,
+        },
+      });
+    });
+  } catch (error) {
+    return serverError("containers", error);
+  }
   revalidatePath("/", "layout");
-  return { ok: true, message: `Контейнер ${formatBic(container.bicCode)} списан из реестра` };
+  return { ok: true, message: `Контейнер ${formatBic(container.bicCode)} списан. История сохранена, единица доступна в фильтре «Списанные»` };
 }
 
 const eventSchema = z.object({
-  type: z.enum(EVENT_TYPES),
+  type: z.enum(MANUAL_EVENT_TYPES, { error: "Этот тип события создаётся только операцией" }),
   occurredAt: dateField,
   description: requiredText("описание", 1000),
   amountUsd: z.union([moneyField, z.literal("").transform(() => null), z.null()]).optional().transform((v) => v ?? null),

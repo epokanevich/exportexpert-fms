@@ -14,6 +14,7 @@ import { formatDate, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { IssuableContainer } from "@/lib/queries/containers";
 import type { LeaseRow } from "@/lib/queries/operations";
+import { mulRate } from "@/lib/money";
 
 /* ── Новый договор ───────────────────────────────────────────────────── */
 
@@ -42,7 +43,7 @@ export function NewLeaseForm({ containers, onDone }: { containers: IssuableConta
   const start = parseDateInput(v.startDate);
   const end = parseDateInput(v.endDate);
   const termDays = start && end ? Math.max(0, Math.round((end.getTime() - start.getTime()) / 86_400_000)) : 0;
-  const contractValue = termDays * Number(v.dailyRateUsd || 0) * selected.length;
+  const contractValue = Number(v.dailyRateUsd) > 0 ? mulRate(Number(v.dailyRateUsd), termDays * selected.length) : 0;
 
   return (
     <form
@@ -163,36 +164,48 @@ export function NewLeaseForm({ containers, onDone }: { containers: IssuableConta
 /* ── Продление ───────────────────────────────────────────────────────── */
 
 export function ExtendLeaseForm({ lease, onDone }: { lease: LeaseRow; onDone: () => void }) {
+  const today = toDateInput(lease.asOf);
   const [months, setMonths] = useState("3");
+  const [newRate, setNewRate] = useState("");
+  const [rateFrom, setRateFrom] = useState(today);
   const { run, isPending, fieldErrors } = useServerAction();
   const newEnd = Number(months) > 0 ? addMonths(new Date(lease.endDate), Number(months)) : null;
+  const rateChanges = newRate !== "" && Number(newRate) > 0 && Number(newRate) !== lease.metrics.currentRateUsd;
 
   return (
     <form
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => extendLeaseAction(lease.id, { months }), onDone);
+        run(() => extendLeaseAction(lease.id, { months, newDailyRateUsd: newRate, rateEffectiveFrom: rateChanges ? rateFrom : "" }), onDone);
       }}
     >
       <p className="text-sm text-slate-600">
         Текущий срок окончания: <b className="font-mono">{formatDate(lease.endDate)}</b>
       </p>
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5" role="group" aria-label="Быстрый выбор срока продления">
         {[3, 6, 12].map((m) => (
-          <button key={m} type="button" onClick={() => setMonths(String(m))} className={cn("flex-1 rounded-lg py-2.5 text-sm font-medium ring-1", months === String(m) ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-slate-700 ring-slate-200")}>
+          <button key={m} type="button" aria-pressed={months === String(m)} onClick={() => setMonths(String(m))} className={cn("min-h-11 flex-1 rounded-lg py-2.5 text-sm font-medium ring-1", months === String(m) ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-slate-700 ring-slate-200")}>
             +{m} мес.
           </button>
         ))}
       </div>
+      <Field label="Продлить на, мес." htmlFor="ex-m" error={fieldErrors.months}>
+        <Input id="ex-m" name="months" type="number" inputMode="numeric" min={1} value={months} onChange={(e) => setMonths(e.target.value)} />
+      </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Продлить на, мес." htmlFor="ex-m" error={fieldErrors.months}>
-          <Input id="ex-m" type="number" inputMode="numeric" min={1} value={months} onChange={(e) => setMonths(e.target.value)} />
+        <Field label="Новая ставка, $/сут." htmlFor="ex-rate" error={fieldErrors.newDailyRateUsd} hint={`Сейчас ${formatUsd(lease.metrics.currentRateUsd, 2)}. Пусто — без изменений`}>
+          <Input id="ex-rate" name="newDailyRateUsd" type="number" inputMode="decimal" step="0.01" min={0.01} value={newRate} onChange={(e) => setNewRate(e.target.value)} />
         </Field>
-        <p className="self-end pb-2 text-xs text-slate-500">
-          Per Diem остаётся {formatUsd(lease.dailyRateUsd, 2)}/сут. Новая ставка — новым договором.
-        </p>
+        <Field label="Действует с" htmlFor="ex-rate-from" error={fieldErrors.rateEffectiveFrom}>
+          <Input id="ex-rate-from" name="rateEffectiveFrom" type="date" min={today} value={rateFrom} disabled={!rateChanges} onChange={(e) => setRateFrom(e.target.value)} />
+        </Field>
       </div>
+      {rateChanges && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 ring-1 ring-amber-100">
+          Дни до {formatDate(parseDateInput(rateFrom) ?? new Date(lease.asOf))} остаются по {formatUsd(lease.metrics.currentRateUsd, 2)}; с этой даты — {formatUsd(Number(newRate), 2)}. Уже начисленное не пересчитывается.
+        </p>
+      )}
       {newEnd && (
         <p className="rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-900 ring-1 ring-indigo-100">
           Новый срок окончания: <b className="font-mono">{formatDate(newEnd)}</b>

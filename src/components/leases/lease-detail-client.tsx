@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, Field, Input, Select } from "@/component
 import { Sheet } from "@/components/ui/sheet";
 import { BicCode, TechStatusBadge } from "@/components/status-badges";
 import { ExtendLeaseForm, OffHireForm, PaymentStatusForm } from "./lease-forms";
-import { rentalDaysInRange } from "@/lib/domain/lease";
+import { accrueItem, rateSegments } from "@/lib/domain/lease";
+import { mulRate, sumMoney } from "@/lib/money";
 import { addDays, parseDateInput, startOfMonthUtc, toDateInput } from "@/lib/dates";
 import { formatDate, formatUsd } from "@/lib/format";
 import type { LeaseRow } from "@/lib/queries/operations";
@@ -17,6 +18,7 @@ export function LeaseActions({ lease }: { lease: LeaseRow }) {
   const [sheet, setSheet] = useState<"extend" | "offhire" | "payment" | null>(null);
   const close = () => setSheet(null);
   const isActive = lease.status === "ACTIVE";
+  const isOpen = lease.status !== "COMPLETED";
 
   return (
     <>
@@ -24,7 +26,7 @@ export function LeaseActions({ lease }: { lease: LeaseRow }) {
         <Button variant="outline" onClick={() => setSheet("payment")}>
           <BadgeDollarSign /> <span className="truncate">Оплата</span>
         </Button>
-        <Button variant="outline" onClick={() => setSheet("extend")} disabled={!isActive}>
+        <Button variant="outline" onClick={() => setSheet("extend")} disabled={!isOpen}>
           <CalendarPlus /> <span className="truncate">Продлить</span>
         </Button>
         <Button onClick={() => setSheet("offhire")} disabled={!isActive || lease.metrics.activeUnits === 0}>
@@ -48,7 +50,7 @@ type Period = "month" | "term" | "custom";
 
 /** Калькулятор начислений: дни аренды × Per Diem по каждой единице за выбранный период. */
 export function LeaseCalculator({ lease }: { lease: LeaseRow }) {
-  const today = new Date();
+  const today = new Date(lease.asOf);
   const [period, setPeriod] = useState<Period>("month");
   const [from, setFrom] = useState(toDateInput(startOfMonthUtc(today)));
   const [to, setTo] = useState(toDateInput(today));
@@ -59,13 +61,16 @@ export function LeaseCalculator({ lease }: { lease: LeaseRow }) {
     return { start: parseDateInput(from) ?? today, end: parseDateInput(to) ?? today };
   })();
 
+  const periods = lease.ratePeriods.map((p) => ({ effectiveFrom: new Date(p.effectiveFrom), dailyRateUsd: p.dailyRateUsd }));
   const rows = lease.items.map((item) => {
-    const days = rentalDaysInRange({ onHireDate: new Date(item.onHireDate), offHireDate: item.offHireDate ? new Date(item.offHireDate) : null }, range.start, range.end);
-    return { ...item, days, amount: days * lease.dailyRateUsd };
+    const accrual = accrueItem({ onHireDate: new Date(item.onHireDate), offHireDate: item.offHireDate ? new Date(item.offHireDate) : null }, periods, range.start, range.end);
+    return { ...item, days: accrual.days, amount: accrual.amountUsd };
   });
   const totalDays = rows.reduce((s, r) => s + r.days, 0);
-  const total = rows.reduce((s, r) => s + r.amount, 0);
-  const forecastToEnd = lease.status === "ACTIVE" ? Math.max(0, Math.round((new Date(lease.endDate).getTime() - today.getTime()) / 86_400_000)) * lease.metrics.activeUnits * lease.dailyRateUsd : 0;
+  const total = sumMoney(rows.map((r) => r.amount));
+  const ratesInRange = rateSegments(periods, range.start, range.end);
+  const daysToEnd = Math.max(0, Math.round((new Date(lease.endDate).getTime() - today.getTime()) / 86_400_000));
+  const forecastToEnd = lease.status === "ACTIVE" ? mulRate(lease.metrics.currentRateUsd, daysToEnd * lease.metrics.activeUnits) : 0;
 
   return (
     <Card>
@@ -121,7 +126,9 @@ export function LeaseCalculator({ lease }: { lease: LeaseRow }) {
             </tbody>
             <tfoot className="bg-slate-900 text-white">
               <tr>
-                <td className="px-3 py-3 font-medium">Итого · {formatUsd(lease.dailyRateUsd, 2)}/сут.</td>
+                <td className="px-3 py-3 font-medium">
+                  Итого · {ratesInRange.length > 1 ? ratesInRange.map((s) => `${formatUsd(s.rateUsd, 2)} с ${formatDate(s.from)}`).join(", ") : `${formatUsd(ratesInRange[0]?.rateUsd ?? lease.dailyRateUsd, 2)}/сут.`}
+                </td>
                 <td className="hidden sm:table-cell" />
                 <td className="px-3 py-3 text-right font-mono">{totalDays}</td>
                 <td className="px-3 py-3 text-right font-mono text-lg font-semibold">{formatUsd(total, 2)}</td>
@@ -131,7 +138,7 @@ export function LeaseCalculator({ lease }: { lease: LeaseRow }) {
         </div>
         {forecastToEnd > 0 && (
           <p className="text-xs text-slate-500">
-            Прогноз до планового Off-Hire ({formatDate(lease.endDate)}): <b className="font-mono text-slate-800">{formatUsd(Math.round(forecastToEnd))}</b> при текущих {lease.metrics.activeUnits} ед.
+            Прогноз до планового Off-Hire ({formatDate(lease.endDate)}): <b className="font-mono text-slate-800">{formatUsd(forecastToEnd, 2)}</b> при текущих {lease.metrics.activeUnits} ед.
           </p>
         )}
       </CardContent>

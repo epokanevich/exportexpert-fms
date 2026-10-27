@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { computeTripTiming, type TripTiming } from "@/lib/domain/one-way";
-import { computeLeaseMetrics, parseLocodeList, type LeaseMetrics } from "@/lib/domain/lease";
+import { computeLeaseMetrics, effectiveLeaseStatus, parseLocodeList, type LeaseMetrics, type RatePeriodInput } from "@/lib/domain/lease";
 import type { NavBadges } from "@/components/layout/nav-items";
 
 export interface TripRow {
@@ -62,6 +62,10 @@ export interface LeaseRow {
   offHireSurvey: string;
   status: string;
   notes: string | null;
+  /** История ставок Per Diem (D-08), по возрастанию даты. */
+  ratePeriods: RatePeriodInput[];
+  /** Бизнес-дата, на которую посчитаны метрики (D-28) — клиентские калькуляторы берут «сегодня» отсюда. */
+  asOf: Date;
   metrics: LeaseMetrics;
   items: {
     id: string;
@@ -76,6 +80,7 @@ export interface LeaseRow {
 }
 
 const leaseInclude = {
+  ratePeriods: { orderBy: { effectiveFrom: "asc" as const }, select: { effectiveFrom: true, dailyRateUsd: true } },
   items: { include: { container: { select: { bicCode: true, sizeType: true, techStatus: true } } }, orderBy: { onHireDate: "asc" as const } },
 };
 
@@ -100,8 +105,10 @@ function toLeaseRow(lease: LeaseWithItems, now: Date): LeaseRow {
     allowedReturnLocodes: parseLocodeList(lease.allowedReturnLocodes),
     onHireSurvey: lease.onHireSurvey,
     offHireSurvey: lease.offHireSurvey,
-    status: lease.status,
+    status: effectiveLeaseStatus(lease, now),
     notes: lease.notes,
+    ratePeriods: lease.ratePeriods,
+    asOf: now,
     metrics: computeLeaseMetrics(lease, now),
     items: lease.items.map((item) => ({
       id: item.id,
@@ -129,7 +136,7 @@ export async function getLeaseRow(id: string, now: Date): Promise<LeaseRow | nul
 export async function getNavBadges(now: Date): Promise<NavBadges> {
   const [trips, leases] = await Promise.all([
     prisma.oneWayTrip.findMany({ where: { status: "ACTIVE" } }),
-    prisma.leaseContract.findMany({ where: { status: "ACTIVE" }, include: { items: true } }),
+    prisma.leaseContract.findMany({ where: { status: "ACTIVE" }, include: { items: true, ratePeriods: true } }),
   ]);
   return {
     oneWayOverdue: trips.filter((t) => computeTripTiming(t, now).status === "OVERDUE").length,

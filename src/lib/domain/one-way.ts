@@ -1,4 +1,5 @@
 import { addDays, diffDays } from "@/lib/dates";
+import { mulRate } from "@/lib/money";
 import { THRESHOLDS, type StoredTripStatus, type TripStatus } from "./constants";
 
 export interface TripTimingInput {
@@ -36,7 +37,7 @@ export function computeTripTiming(trip: TripTimingInput, now: Date): TripTiming 
 
   const daysToDeadline = diffDays(referenceDate, trip.deadlineDate);
   const overdueDays = Math.max(0, -daysToDeadline);
-  const detentionUsd = overdueDays * trip.detentionRatePerDayUsd;
+  const detentionUsd = mulRate(trip.detentionRatePerDayUsd, overdueDays);
   const usedDays = diffDays(trip.handoverDate, referenceDate);
   const freeDaysUsedRatio = trip.freeDays > 0 ? Math.min(1, Math.max(0, usedDays / trip.freeDays)) : 1;
 

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/sheet";
 import { useServerAction } from "@/components/use-server-action";
-import { EVENT_TYPES, EVENT_TYPE_LABELS } from "@/lib/domain/constants";
+import { EVENT_TYPE_LABELS, MANUAL_EVENT_TYPES, type ManualEventType } from "@/lib/domain/constants";
 import { toLocalDateInput } from "@/lib/dates";
 import { ContainerForm, type ContainerFormValues } from "./container-form";
 
@@ -27,6 +27,7 @@ export function ContainerProfileActions({ containerId, bicLabel, formValues, can
   const [editOpen, setEditOpen] = useState(false);
   const [eventOpen, setEventOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [reason, setReason] = useState("");
   const deletion = useServerAction();
 
   if (!canEdit && !canWriteOff) return null;
@@ -69,9 +70,9 @@ export function ContainerProfileActions({ containerId, bicLabel, formValues, can
             <Button
               variant="destructive"
               className="flex-1"
-              disabled={!canDelete}
+              disabled={!canDelete || reason.trim() === ""}
               loading={deletion.isPending}
-              onClick={() => deletion.run(() => deleteContainerAction(containerId), () => router.push("/containers"))}
+              onClick={() => deletion.run(() => deleteContainerAction(containerId, { reason }), () => router.push("/containers"))}
             >
               Списать из парка
             </Button>
@@ -80,9 +81,14 @@ export function ContainerProfileActions({ containerId, bicLabel, formValues, can
       >
         <p className="text-sm text-slate-600">
           {canDelete
-            ? "Контейнер и вся его история (события, рейсы One-Way, строки договоров аренды) будут удалены из базы. Действие необратимо."
+            ? "Контейнер получит статус «Списан» и исчезнет из реестра и аналитики. История событий, рейсы One-Way и договоры аренды сохраняются; списанную единицу можно найти фильтром «Списанные»."
             : "Контейнер в активном One-Way, аренде или по нему открыта претензия. Сначала оформите возврат (Gate-In / Off-Hire) или урегулируйте претензию."}
         </p>
+        {canDelete && (
+          <Field label="Причина списания" htmlFor="wo-reason" error={deletion.fieldErrors.reason} className="mt-4">
+            <Textarea id="wo-reason" name="reason" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Например: коррозия рамы, восстановление нерентабельно" required />
+          </Field>
+        )}
       </Sheet>
     </>
   );
@@ -100,12 +106,12 @@ function EventForm({ containerId, onDone }: { containerId: string; onDone: () =>
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => addContainerEventAction(containerId, { type: type as (typeof EVENT_TYPES)[number], occurredAt, description, amountUsd }), onDone);
+        run(() => addContainerEventAction(containerId, { type: type as ManualEventType, occurredAt, description, amountUsd }), onDone);
       }}
     >
       <Field label="Тип события" htmlFor="ev-type" error={fieldErrors.type}>
         <Select id="ev-type" value={type} onChange={(e) => setType(e.target.value)}>
-          {EVENT_TYPES.filter((t) => t !== "PURCHASE").map((t) => (
+          {MANUAL_EVENT_TYPES.map((t) => (
             <option key={t} value={t}>{EVENT_TYPE_LABELS[t]}</option>
           ))}
         </Select>
