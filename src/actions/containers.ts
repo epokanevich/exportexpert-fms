@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "@/lib/zod-setup";
-import { prisma } from "@/lib/prisma";
+import type { SessionPayload } from "@/lib/auth/session";
+import { prisma, type AppTransaction } from "@/lib/prisma";
 import { validateBic, formatBic } from "@/lib/iso6346";
 import { startOfDayUtc } from "@/lib/dates";
 import { roundMoney, toDbMoney } from "@/lib/money";
@@ -22,6 +23,7 @@ import {
 import { actorOf, authorize, ConflictError, dateField, locodeField, moneyField, optionalMoneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
 import type { ActionResult } from "./types";
 import { businessToday } from "@/lib/business-time";
+import { IMPORT_FIELD_LABELS, MAX_IMPORT_BYTES, mapImportTable, parseCsv, type ImportIssue } from "@/lib/csv-import";
 
 const baseContainerSchema = z.object({
   bicCode: z.string().trim(),
@@ -70,6 +72,35 @@ export type ContainerInput = z.input<typeof baseContainerSchema>;
 /** Операционные статусы, которые назначаются только операциями (One-Way, аренда, резерв, списание). */
 const MANAGED_STATUSES = new Set<string>(MANAGED_OPERATIONAL_STATUSES);
 
+type Tx = AppTransaction;
+
+/** Запись контейнера + событие покупки + аудит в одной транзакции (общая для формы и импорта). */
+async function insertContainer(tx: Tx, data: z.output<typeof containerSchema>, bicCode: string, session: SessionPayload, now: Date) {
+  const created = await tx.container.create({
+    data: {
+      ...data,
+      bicCode,
+      maxPayloadKg: data.maxGrossWeightKg - data.tareWeightKg,
+      storageStartDate: data.operationalStatus === "AVAILABLE" ? businessToday(now) : null,
+      events: {
+        create: [
+          {
+            type: "PURCHASE",
+            occurredAt: now,
+            locode: data.currentLocode,
+            terminal: data.currentTerminal,
+            description: `Контейнер введён в реестр. Покупка ${data.purchaseDate.toISOString().slice(0, 10)} у ${data.manufacturer}.`,
+            amountUsd: data.purchasePriceUsd,
+            actor: session.name,
+          },
+        ],
+      },
+    },
+  });
+  await audit(tx, { actor: actorOf(session), action: "CONTAINER_CREATE", entityType: "Container", entityId: created.id, summary: `${formatBic(bicCode)} добавлен в парк` });
+  return created;
+}
+
 export async function createContainerAction(input: ContainerInput): Promise<ActionResult> {
   const auth = await authorize("fleet:edit");
   if (!auth.ok) return auth.result;
@@ -86,32 +117,7 @@ export async function createContainerAction(input: ContainerInput): Promise<Acti
   if (exists) return { ok: false, error: `Контейнер ${formatBic(bicCode)} уже есть в реестре`, fieldErrors: { bicCode: "Номер уже существует" } };
 
   try {
-    const now = new Date();
-    const container = await prisma.$transaction(async (tx) => {
-      const created = await tx.container.create({
-      data: {
-        ...data,
-        bicCode,
-        maxPayloadKg: data.maxGrossWeightKg - data.tareWeightKg,
-        storageStartDate: data.operationalStatus === "AVAILABLE" ? businessToday(now) : null,
-        events: {
-          create: [
-            {
-              type: "PURCHASE",
-              occurredAt: now,
-              locode: data.currentLocode,
-              terminal: data.currentTerminal,
-              description: `Контейнер введён в реестр. Покупка ${data.purchaseDate.toISOString().slice(0, 10)} у ${data.manufacturer}.`,
-              amountUsd: data.purchasePriceUsd,
-              actor: session.name,
-            },
-          ],
-        },
-      },
-    });
-      await audit(tx, { actor: actorOf(session), action: "CONTAINER_CREATE", entityType: "Container", entityId: created.id, summary: `${formatBic(bicCode)} добавлен в парк` });
-      return created;
-    });
+    const container = await prisma.$transaction((tx) => insertContainer(tx, data, bicCode, session, new Date()));
     revalidatePath("/", "layout");
     return { ok: true, message: `Контейнер ${formatBic(bicCode)} добавлен в парк`, id: container.id };
   } catch (error) {
@@ -290,4 +296,79 @@ export async function addContainerEventAction(containerId: string, input: z.inpu
   }
   revalidatePath(`/containers/${containerId}`);
   return { ok: true, message: "Событие добавлено в журнал" };
+}
+
+export interface ImportResult {
+  ok: boolean;
+  message: string;
+  /** Сколько строк разобрано / будет добавлено. */
+  total: number;
+  imported: number;
+  errors: ImportIssue[];
+}
+
+const fail = (message: string, errors: ImportIssue[] = [], total = 0): ImportResult => ({ ok: false, message, total, imported: 0, errors });
+
+/**
+ * Импорт парка из CSV. «Всё или ничего»: пока в файле есть хоть одна ошибка, в БД не пишется ничего.
+ * commit=false — только проверка (предпросмотр), commit=true — запись одной транзакцией.
+ * Каждая строка проходит ту же схему, что и форма «Добавить»; ограничения на статусы — те же.
+ */
+export async function importContainersAction(csvText: string, commit: boolean): Promise<ImportResult> {
+  const auth = await authorize("fleet:edit");
+  if (!auth.ok) return fail(auth.result.ok ? "" : auth.result.error);
+  if (typeof csvText !== "string" || csvText.length === 0) return fail("Файл пуст");
+  if (csvText.length > MAX_IMPORT_BYTES) return fail("Файл слишком большой — не более 1 МБ");
+
+  const mapped = mapImportTable(parseCsv(csvText));
+  const errors: ImportIssue[] = [...mapped.errors];
+  const valid: { line: number; data: z.output<typeof containerSchema>; bicCode: string }[] = [];
+  const seen = new Map<string, number>();
+  const brokenLines = new Set(mapped.errors.map((e) => e.line));
+  for (const row of mapped.rows) {
+    if (brokenLines.has(row.line)) continue; // ячейка уже не разобрана — повторные ошибки схемы только шумят
+    const parsed = containerSchema.safeParse(row.input);
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues.slice(0, 3)) errors.push({ line: row.line, message: `${IMPORT_FIELD_LABELS[String(issue.path[0])] ?? "Строка"}: ${issue.message}` });
+      continue;
+    }
+    if (MANAGED_STATUSES.has(parsed.data.operationalStatus)) {
+      errors.push({ line: row.line, message: "Статус: One-Way и аренда назначаются операциями, а не импортом" });
+      continue;
+    }
+    const bicCode = validateBic(parsed.data.bicCode).normalized;
+    const firstLine = seen.get(bicCode);
+    if (firstLine !== undefined) {
+      errors.push({ line: row.line, message: `Номер ${formatBic(bicCode)} повторяется (первая строка — ${firstLine})` });
+      continue;
+    }
+    seen.set(bicCode, row.line);
+    valid.push({ line: row.line, data: parsed.data, bicCode });
+  }
+
+  if (valid.length > 0) {
+    const existing = await prisma.container.findMany({ where: { bicCode: { in: valid.map((v) => v.bicCode) } }, select: { bicCode: true } });
+    const existingSet = new Set(existing.map((e) => e.bicCode));
+    for (const row of valid) if (existingSet.has(row.bicCode)) errors.push({ line: row.line, message: `Контейнер ${formatBic(row.bicCode)} уже есть в реестре` });
+  }
+  errors.sort((a, b) => a.line - b.line);
+  const total = mapped.rows.length;
+  if (errors.length > 0) return fail(`Найдено ошибок: ${errors.length}. Исправьте файл — ничего не загружено`, errors, total);
+  if (!commit) return { ok: true, message: `Проверка пройдена: можно добавить ${valid.length} контейнеров`, total, imported: 0, errors: [] };
+
+  try {
+    const now = new Date();
+    await prisma.$transaction(
+      async (tx) => {
+        for (const row of valid) await insertContainer(tx, row.data, row.bicCode, auth.session, now);
+        await audit(tx, { actor: actorOf(auth.session), action: "CONTAINER_IMPORT", entityType: "System", summary: `Импорт парка из CSV: добавлено ${valid.length}` });
+      },
+      { timeout: 30_000 },
+    );
+    revalidatePath("/", "layout");
+    return { ok: true, message: `Добавлено контейнеров: ${valid.length}`, total, imported: valid.length, errors: [] };
+  } catch (error) {
+    const result = serverError("containers-import", error);
+    return fail(result.ok ? "" : result.error, [], total);
+  }
 }

@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Eye, FileSpreadsheet, MapPin, PackageOpen, Plus, Search, SlidersHorizontal, TriangleAlert, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Eye, FileSpreadsheet, FileUp, MapPin, PackageOpen, Plus, Search, SlidersHorizontal, TriangleAlert, X } from "lucide-react";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Badge, Card, DataList, EmptyState, Input, Select } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/sheet";
 import { BicCode, CscBadge, GradeBadge, OperationalStatusBadge, TechStatusBadge } from "@/components/status-badges";
 import { EventTimeline } from "./event-timeline";
 import { ContainerForm, emptyContainerForm } from "./container-form";
+import { ImportSheet } from "./import-sheet";
 import {
   CONDITION_GRADES,
   CONDITION_GRADE_LABELS,
@@ -48,6 +49,7 @@ export function ContainerRegistry({ rows, total, pageCount, query }: ContainerRe
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   function navigate(next: Partial<RegistryQuery>, resetPage = true) {
     const merged = { ...query, ...next, ...(resetPage ? { page: 1 } : {}) };
@@ -143,6 +145,10 @@ export function ContainerRegistry({ rows, total, pageCount, query }: ContainerRe
           <Button variant="outline" size="icon" className="relative size-11 lg:hidden" onClick={() => setFiltersOpen(true)} aria-label="Фильтры">
             <SlidersHorizontal />
             {activeFilterCount > 0 && <span className="absolute -top-1 -right-1 rounded-full bg-indigo-600 px-1.5 text-[10px] leading-4 font-semibold text-white">{activeFilterCount}</span>}
+          </Button>
+          <Button variant="outline" className="h-11 lg:h-10" onClick={() => setImportOpen(true)} title="Загрузить парк из CSV (Excel)" aria-label="Импорт из CSV">
+            <FileUp className="text-indigo-600" />
+            <span className="sr-only sm:not-sr-only">Импорт</span>
           </Button>
           <Button className="h-11 lg:h-10" onClick={() => setCreateOpen(true)}>
             <Plus />
@@ -354,6 +360,8 @@ export function ContainerRegistry({ rows, total, pageCount, query }: ContainerRe
       <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Фильтры" footer={<Button size="lg" className="w-full" onClick={() => setFiltersOpen(false)}>Показать {formatNumber(total)}</Button>}>
         <div className="space-y-3">{filterControls}</div>
       </Sheet>
+
+      <ImportSheet open={importOpen} onClose={() => setImportOpen(false)} />
 
       {/* Создание */}
       <Sheet open={createOpen} onClose={() => setCreateOpen(false)} title="Новый контейнер" description="Номер проверяется по ISO 6346 с расчётом контрольной цифры" size="lg">

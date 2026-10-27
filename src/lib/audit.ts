@@ -11,6 +11,7 @@ export type AuditAction =
   | "USER_ROLE_CHANGE"
   | "USER_CREATE"
   | "CONTAINER_CREATE"
+  | "CONTAINER_IMPORT"
   | "CONTAINER_UPDATE"
   | "CONTAINER_WRITE_OFF"
   | "CONTAINER_EVENT_ADD"
@@ -36,6 +37,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   USER_ROLE_CHANGE: "Смена роли",
   USER_CREATE: "Новый пользователь",
   CONTAINER_CREATE: "Контейнер добавлен",
+  CONTAINER_IMPORT: "Импорт парка из CSV",
   CONTAINER_UPDATE: "Карточка изменена",
   CONTAINER_WRITE_OFF: "Списание",
   CONTAINER_EVENT_ADD: "Запись в журнал",
