@@ -1,5 +1,4 @@
 import "server-only";
-import { prisma } from "@/lib/prisma";
 import { getSession } from "./dal";
 
 export interface CurrentUser {
@@ -9,13 +8,8 @@ export interface CurrentUser {
   role: string;
 }
 
-/**
- * Пользователь по действующей сессии: JWT проверен, учётная запись существует, роль — из БД.
- * null — нет сессии, пользователь удалён или сессия отозвана.
- */
+/** Пользователь действующей сессии (JWT + tokenVersion + запись в БД) или null — для route handlers (401 вместо редиректа). */
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   const session = await getSession();
-  if (!session) return null;
-  const user = await prisma.user.findUnique({ where: { id: session.userId }, select: { id: true, email: true, name: true, role: true } });
-  return user;
+  return session ? { id: session.userId, email: session.email, name: session.name, role: session.role } : null;
 }

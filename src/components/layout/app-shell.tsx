@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useTransition, type ReactNode } from "react";
-import { LogOut, RotateCcw, UserRound } from "lucide-react";
+import { KeyRound, LogOut, RotateCcw, ShieldCheck, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { logoutAction } from "@/actions/auth";
 import { resetDemoDataAction } from "@/actions/demo";
 import { Brand } from "@/components/brand";
-import { Button } from "@/components/ui/button";
+import { Button, buttonClasses } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS, isActivePath, type NavBadges } from "./nav-items";
@@ -59,7 +59,7 @@ function useProfileActions() {
   return { reset, logout, isResetting, isLoggingOut };
 }
 
-function ProfileActions({ onDone, compact = false, canReset }: { onDone?: () => void; compact?: boolean; canReset: boolean }) {
+function ProfileActions({ onDone, compact = false, canReset, isAdmin }: { onDone?: () => void; compact?: boolean; canReset: boolean; isAdmin: boolean }) {
   const { reset, logout, isResetting, isLoggingOut } = useProfileActions();
   const [confirming, setConfirming] = useState(false);
 
@@ -90,6 +90,16 @@ function ProfileActions({ onDone, compact = false, canReset }: { onDone?: () => 
 
   return (
     <div className={cn("grid gap-2", compact ? "grid-cols-1" : "grid-cols-1")}>
+      <Link href="/profile" onClick={onDone} className={buttonClasses("ghost", compact ? "sm" : "md", "justify-start")}>
+        <KeyRound aria-hidden />
+        Профиль и пароль
+      </Link>
+      {isAdmin && (
+        <Link href="/admin" onClick={onDone} className={buttonClasses("ghost", compact ? "sm" : "md", "justify-start")}>
+          <ShieldCheck aria-hidden />
+          Пользователи и аудит
+        </Link>
+      )}
       {canReset && (
         <Button variant="outline" size={compact ? "sm" : "md"} className="h-auto min-h-8 justify-start py-1.5 text-left whitespace-normal" loading={isResetting} onClick={() => setConfirming(true)}>
           <RotateCcw aria-hidden />
@@ -147,7 +157,7 @@ export function AppShell({ user, badges, canReset, children }: AppShellProps) {
             </div>
           </div>
           <div className="[&_button]:w-full [&_button]:border-white/10 [&_button]:bg-transparent [&_button]:text-slate-300 [&_button:hover]:bg-white/10 [&_button:hover]:text-white">
-            <ProfileActions compact canReset={canReset} />
+            <ProfileActions compact canReset={canReset} isAdmin={user.role === "ADMIN"} />
           </div>
         </div>
       </aside>
@@ -208,7 +218,7 @@ export function AppShell({ user, badges, canReset, children }: AppShellProps) {
       </nav>
 
       <Sheet open={profileOpen} onClose={() => setProfileOpen(false)} title={user.name} description={`${user.email} · ${ROLE_LABELS[user.role] ?? user.role}`}>
-        <ProfileActions onDone={() => setProfileOpen(false)} canReset={canReset} />
+        <ProfileActions onDone={() => setProfileOpen(false)} canReset={canReset} isAdmin={user.role === "ADMIN"} />
       </Sheet>
     </div>
   );

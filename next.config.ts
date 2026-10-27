@@ -1,17 +1,12 @@
 import type { NextConfig } from "next";
-
-const SECURITY_HEADERS = [
-  { key: "X-Frame-Options", value: "DENY" },
-  { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-];
+import { staticSecurityHeaders } from "./src/lib/security-headers";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   serverExternalPackages: ["@prisma/client", "bcryptjs"],
   async headers() {
-    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+    // CSP с nonce выставляет src/proxy.ts (на каждый запрос); здесь — статические заголовки и HSTS.
+    return [{ source: "/:path*", headers: staticSecurityHeaders(process.env.NODE_ENV === "production") }];
   },
 };
 

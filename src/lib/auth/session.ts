@@ -12,6 +12,8 @@ export interface SessionPayload {
   email: string;
   name: string;
   role: string;
+  /** Версия сессий пользователя (D-10). Токен действителен, пока совпадает с User.tokenVersion в БД. */
+  tokenVersion: number;
 }
 
 const MIN_SECRET_LENGTH = 32;
@@ -40,11 +42,14 @@ export async function verifySession(token: string | undefined): Promise<SessionP
   try {
     const { payload } = await jwtVerify(token, getSecretKey(), { algorithms: ["HS256"] });
     if (typeof payload.userId !== "string" || typeof payload.email !== "string") return null;
+    // Токены без версии выпущены до D-10 — считаем их недействительными (повторный вход).
+    if (typeof payload.tokenVersion !== "number") return null;
     return {
       userId: payload.userId,
       email: payload.email,
       name: typeof payload.name === "string" ? payload.name : payload.email,
-      role: typeof payload.role === "string" ? payload.role : "MANAGER",
+      role: typeof payload.role === "string" ? payload.role : "INSPECTOR",
+      tokenVersion: payload.tokenVersion,
     };
   } catch {
     // Просроченный или подделанный токен — просто нет сессии.

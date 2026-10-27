@@ -13,15 +13,22 @@ export type Parsed<T> = { ok: true; data: T } | { ok: false; result: ActionResul
 export type Authorized = { ok: true; session: SessionPayload } | { ok: false; result: ActionResult };
 
 /**
- * Сессия + право на действие. Роль читается из БД, а не из JWT: понижение роли или удаление
- * пользователя действует сразу, не дожидаясь истечения 8-часового токена.
+ * Сессия + право на действие. Роль и версия сессии читаются из БД, а не из JWT: понижение роли,
+ * удаление пользователя или выход действуют сразу, не дожидаясь истечения 8-часового токена.
  */
 export async function authorize(permission: Permission): Promise<Authorized> {
   const session = await requireSession();
-  const user = await prisma.user.findUnique({ where: { id: session.userId }, select: { role: true, name: true } });
+  const user = await prisma.user.findUnique({ where: { id: session.userId }, select: { role: true, name: true, tokenVersion: true } });
   if (!user) return { ok: false, result: { ok: false, error: "Учётная запись не найдена — войдите заново" } };
+  // D-10: сессия отозвана (выход, смена роли или пароля) — даже если JWT ещё не истёк.
+  if (user.tokenVersion !== session.tokenVersion) return { ok: false, result: { ok: false, error: "Сессия завершена — войдите заново" } };
   if (!can(user.role, permission)) return { ok: false, result: { ok: false, error: "Недостаточно прав для этого действия" } };
   return { ok: true, session: { ...session, role: user.role, name: user.name } };
+}
+
+/** Автор операции для аудит-журнала. */
+export function actorOf(session: SessionPayload): { id: string; name: string } {
+  return { id: session.userId, name: session.name };
 }
 
 /** Состояние записи изменил параллельный запрос (двойной клик, второй сотрудник) — операция не выполнена. */

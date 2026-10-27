@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { audit } from "@/lib/audit";
 import { CONDITION_GRADES, CONDITION_GRADE_LABELS, TECH_STATUSES, TECH_STATUS_LABELS, locodeCity } from "@/lib/domain/constants";
 import { formatBic } from "@/lib/iso6346";
 import { issueBlockReason } from "@/lib/domain/container";
 import { formatDate, formatUsd } from "@/lib/format";
-import { authorize, ConflictError, dateField, locodeField, moneyField, optionalMoneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
+import { actorOf, authorize, ConflictError, dateField, locodeField, moneyField, optionalMoneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
 import { damageLineSchema, describeDamage, eorFromDamages, MAX_DAMAGE_LINES } from "@/lib/domain/damage";
 import { toDbMoney } from "@/lib/money";
 import type { ActionResult } from "./types";
@@ -78,6 +79,13 @@ export async function inspectContainerAction(containerId: string, input: Inspect
         },
       });
       if (claimed.count === 0) throw new ConflictError("Состояние контейнера изменил другой акт — обновите страницу");
+      await audit(tx, {
+        actor: actorOf(session),
+        action: "INSPECTION",
+        entityType: "Container",
+        entityId: containerId,
+        summary: `${formatBic(c.bicCode)}: акт осмотра — ${TECH_STATUS_LABELS[data.techStatus]}, грейд ${data.conditionGrade}${data.eorUsd ? `, EOR ${formatUsd(data.eorUsd)}` : ""}${data.damages.length ? `, строк повреждений: ${data.damages.length}` : ""}`,
+      });
       const inspection = await tx.containerEvent.create({
         data: {
           ...at,
@@ -111,6 +119,9 @@ export async function inspectContainerAction(containerId: string, input: Inspect
 
 const gateInSchema = z.object({ locode: locodeField, terminal: requiredText("терминал", 120) });
 
+/** Откуда допустим Gate-In на терминал: собственный рейс, перемещение между депо, ремзона. */
+const GATE_IN_FROM = ["IN_TRANSIT", "AVAILABLE", "MAINTENANCE"];
+
 /** Gate-In на терминал (прибытие из собственного рейса / перемещение между депо). */
 export async function gateInAction(containerId: string, input: z.input<typeof gateInSchema>): Promise<ActionResult> {
   const auth = await authorize("inspection");
@@ -121,22 +132,28 @@ export async function gateInAction(containerId: string, input: z.input<typeof ga
   const c = await prisma.container.findUnique({ where: { id: containerId } });
   if (!c) return notFound("Контейнер");
   if (c.deletedAt) return { ok: false, error: "Контейнер списан — операции недоступны" };
-  if (c.operationalStatus === "ONE_WAY" || c.operationalStatus === "LONG_TERM_LEASE" || c.operationalStatus === "RESERVED") {
+  if (!GATE_IN_FROM.includes(c.operationalStatus)) {
     return { ok: false, error: "Возврат из One-Way или аренды оформляется в соответствующем модуле" };
   }
   const { locode, terminal } = parsed.data;
   const now = new Date();
   const nextStatus = c.techStatus === "IN_REPAIR" ? "MAINTENANCE" : "AVAILABLE";
-  await prisma.container.update({
-    where: { id: containerId },
-    data: {
-      operationalStatus: nextStatus,
-      currentLocode: locode,
-      currentTerminal: terminal,
-      storageStartDate: nextStatus === "AVAILABLE" ? businessToday(now) : null,
-      events: { create: { type: "GATE_IN", occurredAt: now, locode, terminal, description: `Gate-In: принят на ${terminal} (${locodeCity(locode)}).`, actor: session.name } },
-    },
-  });
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Захват условием по статусу: параллельная выдача в One-Way/аренду не будет перезаписана Gate-In'ом.
+      const claimed = await tx.container.updateMany({
+        where: { id: containerId, deletedAt: null, operationalStatus: { in: GATE_IN_FROM } },
+        data: { operationalStatus: nextStatus, currentLocode: locode, currentTerminal: terminal, storageStartDate: nextStatus === "AVAILABLE" ? businessToday(now) : null },
+      });
+      if (claimed.count === 0) throw new ConflictError(`${formatBic(c.bicCode)}: статус изменился — обновите страницу`);
+      await tx.containerEvent.create({
+        data: { containerId, type: "GATE_IN", occurredAt: now, locode, terminal, description: `Gate-In: принят на ${terminal} (${locodeCity(locode)}).`, actor: session.name },
+      });
+      await audit(tx, { actor: actorOf(session), action: "GATE_IN", entityType: "Container", entityId: containerId, summary: `${formatBic(c.bicCode)}: Gate-In на ${terminal} (${locodeCity(locode)})` });
+    });
+  } catch (error) {
+    return serverError("inspector", error);
+  }
   revalidatePath("/", "layout");
   return { ok: true, message: `${formatBic(c.bicCode)}: Gate-In на ${terminal}` };
 }
@@ -156,14 +173,17 @@ export async function gateOutAction(containerId: string, input: z.input<typeof g
   const blockReason = issueBlockReason(c, businessToday(now));
   if (blockReason) return { ok: false, error: `Gate-Out запрещён: ${blockReason}` };
   const { destinationLocode, note } = parsed.data;
-  await prisma.container.update({
-    where: { id: containerId },
-    data: {
-      operationalStatus: "IN_TRANSIT",
-      currentTerminal: `В пути: ${c.currentTerminal} → ${locodeCity(destinationLocode)}`,
-      storageStartDate: null,
-      events: {
-        create: {
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Как при выдаче в One-Way: контейнер захватывается, только если он ещё на стоке.
+      const claimed = await tx.container.updateMany({
+        where: { id: containerId, deletedAt: null, operationalStatus: "AVAILABLE" },
+        data: { operationalStatus: "IN_TRANSIT", currentTerminal: `В пути: ${c.currentTerminal} → ${locodeCity(destinationLocode)}`, storageStartDate: null },
+      });
+      if (claimed.count === 0) throw new ConflictError(`${formatBic(c.bicCode)} уже выдан или снят со стока — обновите страницу`);
+      await tx.containerEvent.create({
+        data: {
+          containerId,
           type: "GATE_OUT",
           occurredAt: now,
           locode: c.currentLocode,
@@ -171,9 +191,12 @@ export async function gateOutAction(containerId: string, input: z.input<typeof g
           description: `Gate-Out: собственный рейс ${locodeCity(c.currentLocode)} → ${locodeCity(destinationLocode)}.${note ? ` ${note}` : ""}`,
           actor: session.name,
         },
-      },
-    },
-  });
+      });
+      await audit(tx, { actor: actorOf(session), action: "GATE_OUT", entityType: "Container", entityId: containerId, summary: `${formatBic(c.bicCode)}: Gate-Out в ${locodeCity(destinationLocode)}` });
+    });
+  } catch (error) {
+    return serverError("inspector", error);
+  }
   revalidatePath("/", "layout");
   return { ok: true, message: `${formatBic(c.bicCode)}: Gate-Out, рейс в ${locodeCity(destinationLocode)}` };
 }
@@ -191,12 +214,12 @@ export async function renewCscAction(containerId: string, input: z.input<typeof 
   if (c.deletedAt) return { ok: false, error: "Контейнер списан — операции недоступны" };
   const { cscPlateExpiry } = parsed.data;
   if (cscPlateExpiry <= businessToday()) return { ok: false, error: "Новая дата должна быть в будущем", fieldErrors: { cscPlateExpiry: "Дата в прошлом" } };
-  await prisma.container.update({
-    where: { id: containerId },
-    data: {
-      cscPlateExpiry,
-      events: {
-        create: {
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.container.update({ where: { id: containerId }, data: { cscPlateExpiry } });
+      await tx.containerEvent.create({
+        data: {
+          containerId,
           type: "CSC_RENEWAL",
           occurredAt: new Date(),
           locode: c.currentLocode,
@@ -204,9 +227,12 @@ export async function renewCscAction(containerId: string, input: z.input<typeof 
           description: `Освидетельствование ACEP пройдено. Табличка КБК (CSC) действительна до ${formatDate(cscPlateExpiry)}.`,
           actor: session.name,
         },
-      },
-    },
-  });
+      });
+      await audit(tx, { actor: actorOf(session), action: "CSC_RENEWAL", entityType: "Container", entityId: containerId, summary: `${formatBic(c.bicCode)}: КБК продлена до ${formatDate(cscPlateExpiry)}` });
+    });
+  } catch (error) {
+    return serverError("inspector", error);
+  }
   revalidatePath("/", "layout");
   return { ok: true, message: `${formatBic(c.bicCode)}: КБК продлена до ${formatDate(cscPlateExpiry)}` };
 }

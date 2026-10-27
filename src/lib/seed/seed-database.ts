@@ -25,6 +25,7 @@ import {
 
 export const DEMO_USERS = [
   { email: "admin@exportexpert.ru", name: "Администратор парка", role: "ADMIN", password: "Export2026!" },
+  { email: "manager@exportexpert.ru", name: "Менеджер парка", role: "MANAGER", password: "Export2026!" },
   { email: "inspector@exportexpert.ru", name: "Инспектор терминала", role: "INSPECTOR", password: "Export2026!" },
 ] as const;
 

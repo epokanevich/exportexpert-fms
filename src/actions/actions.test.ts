@@ -8,6 +8,7 @@ const { prismaMock, tx, session } = vi.hoisted(() => {
     leaseItem: { updateMany: vi.fn() },
     leaseContract: { create: vi.fn(), update: vi.fn() },
     leaseRatePeriod: { upsert: vi.fn() },
+    auditLog: { create: vi.fn() },
   };
   const prismaMock = {
     user: { findUnique: vi.fn() },
@@ -17,7 +18,7 @@ const { prismaMock, tx, session } = vi.hoisted(() => {
     containerEvent: { createMany: vi.fn() },
     $transaction: vi.fn(async (arg: unknown) => (typeof arg === "function" ? (arg as (t: typeof tx) => unknown)(tx) : Promise.all(arg as unknown[]))),
   };
-  const session = { userId: "u1", email: "user@exportexpert.ru", name: "Тест", role: "ADMIN" };
+  const session = { userId: "u1", email: "user@exportexpert.ru", name: "Тест", role: "ADMIN", tokenVersion: 0 };
   return { prismaMock, tx, session };
 });
 
@@ -33,7 +34,7 @@ import { extendLeaseAction, offHireAction } from "./leases";
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
 function actAs(role: string) {
-  prismaMock.user.findUnique.mockResolvedValue({ role, name: `Пользователь ${role}` });
+  prismaMock.user.findUnique.mockResolvedValue({ role, name: `Пользователь ${role}`, tokenVersion: 0 });
 }
 
 const activeTrip = {
@@ -84,6 +85,13 @@ describe("role checks on the server", () => {
       handoverDate: "2026-10-01", freeDays: 10, feeUsd: 0, detentionRatePerDayUsd: 15,
     });
     expect(result.ok).toBe(false);
+    expect(prismaMock.container.findUnique).not.toHaveBeenCalled();
+  });
+
+  test("D-10: a token whose version was revoked (logout, role or password change) is refused", async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ role: "ADMIN", name: "Админ", tokenVersion: 1 });
+    const result = await deleteContainerAction("c1", { reason: "Списание" });
+    expect(result).toEqual({ ok: false, error: "Сессия завершена — войдите заново" });
     expect(prismaMock.container.findUnique).not.toHaveBeenCalled();
   });
 
@@ -149,6 +157,10 @@ describe("write-off is a soft delete (1.3)", () => {
       data: expect.objectContaining({ operationalStatus: "WRITTEN_OFF", deletedAt: expect.any(Date) }),
     }));
     expect(tx.containerEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: "WRITE_OFF" }) }));
+    // 3.7: кто и когда — в той же транзакции.
+    expect(tx.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: "u1", action: "CONTAINER_WRITE_OFF", entityType: "Container", entityId: "c1" }),
+    });
   });
 
   test("a write-off requires a reason", async () => {

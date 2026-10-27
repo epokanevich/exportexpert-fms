@@ -13,12 +13,44 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  role         String   @default("INSPECTOR") // ADMIN | MANAGER | INSPECTOR; по умолчанию — наименее привилегированная (D-30)
-  passwordHash String
-  createdAt    DateTime @default(now())
+  id                String    @id @default(cuid())
+  email             String    @unique
+  name              String
+  role              String    @default("INSPECTOR") // ADMIN | MANAGER | INSPECTOR; по умолчанию — наименее привилегированная (D-30)
+  passwordHash      String
+  /// Версия сессий (D-10): входит в JWT; инкремент при выходе, смене роли и пароля отзывает все выданные токены.
+  tokenVersion      Int       @default(0)
+  passwordChangedAt DateTime?
+  createdAt         DateTime  @default(now())
+
+  auditLogs AuditLog[]
+}
+
+/// Ограничитель перебора паролей (D-09): общий для всех инстансов, ключ — «ip|email» или «ip».
+model LoginAttempt {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+
+  @@index([resetAt])
+}
+
+/// Аудит-журнал (3.7): кто и когда выполнил мутацию. Пишется в той же транзакции, что и сама операция.
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  actorName  String
+  action     String // CONTAINER_CREATE, ONE_WAY_ISSUE, LEASE_OFF_HIRE, USER_ROLE_CHANGE …
+  entityType String // Container | OneWayTrip | LeaseContract | User | ContainerEvent | System
+  entityId   String?
+  summary    String
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([userId])
 }
 
 model Container {

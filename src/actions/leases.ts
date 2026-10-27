@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { audit } from "@/lib/audit";
 import { businessToday, latestBusinessDate } from "@/lib/business-time";
 import { addMonths, startOfDayUtc } from "@/lib/dates";
 import { MAX_LEASE_UNITS, PAYMENT_STATUSES, PAYMENT_STATUS_LABELS, locodeCity } from "@/lib/domain/constants";
@@ -11,7 +12,7 @@ import { issueBlockReason } from "@/lib/domain/container";
 import { formatBic } from "@/lib/iso6346";
 import { formatDate, formatUsd } from "@/lib/format";
 import { roundMoney, toDbMoney } from "@/lib/money";
-import { authorize, ConflictError, dateField, innField, locodeField, moneyField, optionalMoneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
+import { actorOf, authorize, ConflictError, dateField, innField, locodeField, moneyField, optionalMoneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
 import type { ActionResult } from "./types";
 
 const rateField = z.coerce.number({ error: "Введите ставку" }).positive("Ставка должна быть больше 0").max(1000, "Не более $1 000 в сутки");
@@ -117,6 +118,13 @@ export async function createLeaseAction(input: CreateLeaseInput): Promise<Action
           },
         });
       }
+      await audit(tx, {
+        actor: actorOf(session),
+        action: "LEASE_CREATE",
+        entityType: "LeaseContract",
+        entityId: created.id,
+        summary: `Договор ${data.contractNumber} (${data.lesseeName}): ${containers.length} ед., ${formatUsd(data.dailyRateUsd, 2)}/сут.${isScheduled ? `, On-Hire ${formatDate(data.startDate)}` : ""}`,
+      });
       return created;
     });
     revalidatePath("/", "layout");
@@ -183,6 +191,14 @@ export async function extendLeaseAction(leaseId: string, input: z.input<typeof e
       await tx.leaseContract.update({
         where: { id: leaseId },
         data: { endDate: newEnd, offHireSurvey: "NOT_STARTED", ...(rate ? { dailyRateUsd: rate } : {}) },
+      });
+      await audit(tx, {
+        actor: actorOf(session),
+        action: "LEASE_EXTEND",
+        entityType: "LeaseContract",
+        entityId: leaseId,
+        summary: `${lease.contractNumber} продлён на ${months} мес. до ${formatDate(newEnd)}.${rateNote}`,
+        details: rate ? { newRateUsd: rate, effectiveFrom: effectiveFrom.toISOString().slice(0, 10) } : undefined,
       });
       if (lease.items.length > 0) {
         await tx.containerEvent.createMany({
@@ -281,6 +297,13 @@ export async function offHireAction(leaseId: string, input: OffHireInput): Promi
         where: { id: leaseId },
         data: remaining === 0 ? { status: "COMPLETED", offHireSurvey: "SIGNED" } : { offHireSurvey: "PENDING" },
       });
+      await audit(tx, {
+        actor: actorOf(session),
+        action: "LEASE_OFF_HIRE",
+        entityType: "LeaseContract",
+        entityId: leaseId,
+        summary: `Off-Hire по ${lease.contractNumber}: ${items.length} ед. на ${data.terminal}${remaining === 0 ? ", договор закрыт" : ""}`,
+      });
     });
     revalidatePath("/", "layout");
     return { ok: true, message: `Off-Hire оформлен: ${items.length} ед.${remaining === 0 ? " Договор закрыт." : ` На руках у арендатора: ${remaining}.`}` };
@@ -298,7 +321,10 @@ export async function updatePaymentStatusAction(leaseId: string, input: z.input<
   if (!parsed.ok) return parsed.result;
   const lease = await prisma.leaseContract.findUnique({ where: { id: leaseId }, select: { id: true, contractNumber: true } });
   if (!lease) return notFound("Договор");
-  await prisma.leaseContract.update({ where: { id: leaseId }, data: { paymentStatus: parsed.data.paymentStatus } });
+  await prisma.$transaction(async (tx) => {
+    await tx.leaseContract.update({ where: { id: leaseId }, data: { paymentStatus: parsed.data.paymentStatus } });
+    await audit(tx, { actor: actorOf(auth.session), action: "LEASE_PAYMENT_STATUS", entityType: "LeaseContract", entityId: leaseId, summary: `${lease.contractNumber}: оплата — «${PAYMENT_STATUS_LABELS[parsed.data.paymentStatus]}»` });
+  });
   revalidatePath("/", "layout");
   return { ok: true, message: `${lease.contractNumber}: статус оплаты — «${PAYMENT_STATUS_LABELS[parsed.data.paymentStatus]}»` };
 }

@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { audit } from "@/lib/audit";
 import { attachmentsDir, createDatabaseStorage, createLocalDiskStorage, newStorageKey, resolveStorageDriver, type AttachmentStorage } from "./storage";
 import { MAX_ATTACHMENT_BYTES, validateUpload } from "./validation";
 
@@ -31,7 +32,8 @@ export async function saveAttachment(params: { eventId: string; file: File; uplo
   const key = newStorageKey();
   await store.put(key, data);
   try {
-    const row = await prisma.attachment.create({
+    const row = await prisma.$transaction(async (tx) => {
+      const created = await tx.attachment.create({
       data: {
         containerId: event.containerId,
         eventId: event.id,
@@ -42,6 +44,15 @@ export async function saveAttachment(params: { eventId: string; file: File; uplo
         storageKey: key,
         uploadedById: params.uploadedBy.id,
       },
+    });
+      await audit(tx, {
+        actor: params.uploadedBy,
+        action: "ATTACHMENT_UPLOAD",
+        entityType: "ContainerEvent",
+        entityId: event.id,
+        summary: `Вложение «${created.fileName}» (${created.mimeType}, ${created.sizeBytes} Б)`,
+      });
+      return created;
     });
     return { ok: true, id: row.id, fileName: row.fileName };
   } catch (error) {

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { isDemoMode } from "@/lib/demo-mode";
 import { seedDatabase } from "@/lib/seed/seed-database";
-import { authorize, serverError } from "./helpers";
+import { actorOf, authorize, serverError } from "./helpers";
+import { audit } from "@/lib/audit";
 import type { ActionResult } from "./types";
 
 export async function resetDemoDataAction(): Promise<ActionResult> {
@@ -14,6 +15,7 @@ export async function resetDemoDataAction(): Promise<ActionResult> {
   if (!isDemoMode()) return { ok: false, error: "Сброс демо-данных отключён: стенд работает не в демо-режиме" };
   try {
     const summary = await seedDatabase(prisma);
+    await audit(prisma, { actor: actorOf(auth.session), action: "DEMO_RESET", entityType: "System", summary: `Демо-данные восстановлены: ${summary.containers} контейнеров` });
     revalidatePath("/", "layout");
     return {
       ok: true,

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { audit } from "@/lib/audit";
 import { businessToday, latestBusinessDate } from "@/lib/business-time";
 import { computeDeadline, computeTripTiming } from "@/lib/domain/one-way";
 import { locodeCity } from "@/lib/domain/constants";
@@ -10,7 +11,7 @@ import { issueBlockReason } from "@/lib/domain/container";
 import { formatBic } from "@/lib/iso6346";
 import { formatDate, formatUsd } from "@/lib/format";
 import { startOfDayUtc } from "@/lib/dates";
-import { authorize, ConflictError, dateField, innField, locodeField, moneyField, optionalMoneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
+import { actorOf, authorize, ConflictError, dateField, innField, locodeField, moneyField, optionalMoneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
 import type { ActionResult } from "./types";
 
 const createTripSchema = z.object({
@@ -86,6 +87,7 @@ export async function createOneWayAction(input: CreateTripInput): Promise<Action
           actor: session.name,
         },
       });
+      await audit(tx, { actor: actorOf(session), action: "ONE_WAY_ISSUE", entityType: "OneWayTrip", entityId: created.id, summary: `${formatBic(container.bicCode)} выдан в One-Way ${data.bookingRef} (${data.counterpartyName}) до ${formatDate(deadline)}` });
       return created;
     });
     revalidatePath("/", "layout");
@@ -143,6 +145,14 @@ export async function registerOneWayReturnAction(tripId: string, input: TripRetu
         },
       });
       if (closed.count === 0) throw new ConflictError("Возврат по этому рейсу уже зафиксирован");
+      await audit(tx, {
+        actor: actorOf(session),
+        action: "ONE_WAY_RETURN",
+        entityType: "OneWayTrip",
+        entityId: trip.id,
+        summary: `Gate-In ${formatBic(trip.container.bicCode)} по ${trip.bookingRef}: ${isDamaged ? "повреждён, претензия" : "исправен"}, детеншн ${formatUsd(timing.detentionUsd)}`,
+        details: { detentionUsd: timing.detentionUsd, overdueDays: timing.overdueDays },
+      });
       await tx.container.update({
         where: { id: trip.containerId },
         data: {
@@ -203,6 +213,7 @@ export async function resolveDisputeAction(tripId: string, input: z.input<typeof
         data: { status: "COMPLETED", notes: [trip.notes, `Претензия закрыта: компенсация ${formatUsd(compensationUsd)}. ${note ?? ""}`].filter(Boolean).join("\n") },
       });
       if (closed.count === 0) throw new ConflictError("Претензия уже закрыта");
+      await audit(tx, { actor: actorOf(session), action: "ONE_WAY_DISPUTE_RESOLVE", entityType: "OneWayTrip", entityId: tripId, summary: `Претензия ${trip.bookingRef} закрыта, компенсация ${formatUsd(compensationUsd)}` });
       await tx.container.update({
         where: { id: trip.containerId },
         data: {

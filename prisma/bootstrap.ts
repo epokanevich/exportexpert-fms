@@ -1,24 +1,42 @@
 /**
- * Начальная загрузка демо-данных при деплое (Vercel: скрипт vercel-build).
- * Идемпотентно: если в базе уже есть контейнеры или пользователи — ничего не делает,
- * поэтому повторные деплои не затирают рабочие данные.
+ * Первый запуск (скрипт сборки на Render/Vercel). Работает только с ПУСТОЙ базой — повторные деплои ничего не меняют:
+ *  DEMO_MODE=true → демо-данные; иначе → один администратор с паролем из ADMIN_INITIAL_PASSWORD, без демо-данных.
  */
+import bcrypt from "bcryptjs";
 import { createPrismaClient } from "../src/lib/prisma";
 import { seedDatabase } from "../src/lib/seed/seed-database";
+import { planBootstrap } from "../src/lib/bootstrap-plan";
+import { BCRYPT_COST } from "../src/lib/auth/password-policy";
 
 async function main(): Promise<void> {
   const prisma = createPrismaClient();
   try {
     const [containers, users] = await Promise.all([prisma.container.count(), prisma.user.count()]);
-    if (containers > 0 || users > 0) {
-      process.stdout.write(`✔ Bootstrap: база уже заполнена (контейнеров: ${containers}, пользователей: ${users}) — пропускаю.\n`);
-      return;
+    const plan = planBootstrap({ users, containers }, process.env);
+    switch (plan.kind) {
+      case "skip":
+        process.stdout.write(`✔ Bootstrap: ${plan.reason} — пропускаю.\n`);
+        return;
+      case "error":
+        throw new Error(plan.message);
+      case "demo": {
+        const summary = await seedDatabase(prisma);
+        process.stdout.write(
+          `✔ Bootstrap (DEMO_MODE): загружены демо-данные — ${summary.containers} контейнеров, ${summary.oneWayTrips} One-Way, ` +
+            `${summary.leases} договоров, ${summary.events} событий.\n`,
+        );
+        return;
+      }
+      case "admin": {
+        const passwordHash = await bcrypt.hash(plan.password, BCRYPT_COST);
+        await prisma.$transaction(async (tx) => {
+          const admin = await tx.user.create({ data: { email: plan.email, name: plan.name, role: "ADMIN", passwordHash, passwordChangedAt: new Date() } });
+          await tx.auditLog.create({ data: { userId: admin.id, actorName: "Система FMS", action: "USER_CREATE", entityType: "User", entityId: admin.id, summary: `Первый администратор ${admin.email} создан при развёртывании` } });
+        });
+        process.stdout.write(`✔ Bootstrap: создан администратор ${plan.email}. Смените пароль после первого входа (Профиль → Пароль).\n`);
+        return;
+      }
     }
-    const summary = await seedDatabase(prisma);
-    process.stdout.write(
-      `✔ Bootstrap: загружены демо-данные — ${summary.containers} контейнеров, ${summary.oneWayTrips} One-Way, ` +
-        `${summary.leases} договоров, ${summary.events} событий.\n`,
-    );
   } finally {
     await prisma.$disconnect();
   }

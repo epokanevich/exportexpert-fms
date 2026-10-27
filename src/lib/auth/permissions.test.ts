@@ -22,6 +22,14 @@ describe("role permissions", () => {
     expect(can("INSPECTOR", "fleet:delete")).toBe(false);
   });
 
+  test("only ADMIN manages users and reads the audit log", () => {
+    expect(can("ADMIN", "users:manage")).toBe(true);
+    expect(can("ADMIN", "audit:view")).toBe(true);
+    expect(can("MANAGER", "users:manage")).toBe(false);
+    expect(can("MANAGER", "audit:view")).toBe(false);
+    expect(can("INSPECTOR", "audit:view")).toBe(false);
+  });
+
   test("an unknown role gets no permissions", () => {
     expect(can("SUPERADMIN", "inspection")).toBe(false);
     expect(can("", "inspection")).toBe(false);

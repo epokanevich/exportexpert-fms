@@ -5,10 +5,12 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { validateBic, formatBic } from "@/lib/iso6346";
 import { startOfDayUtc } from "@/lib/dates";
-import { roundMoney } from "@/lib/money";
+import { roundMoney, toDbMoney } from "@/lib/money";
+import { audit } from "@/lib/audit";
 import {
   CONDITION_GRADES,
   MANUAL_EVENT_TYPES,
+  EVENT_TYPE_LABELS,
   OWNERSHIP_TYPES,
   MANAGED_OPERATIONAL_STATUSES,
   OPERATIONAL_STATUSES,
@@ -17,7 +19,7 @@ import {
   OPERATIONAL_STATUS_LABELS,
   TECH_STATUS_LABELS,
 } from "@/lib/domain/constants";
-import { authorize, ConflictError, dateField, locodeField, moneyField, optionalMoneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
+import { actorOf, authorize, ConflictError, dateField, locodeField, moneyField, optionalMoneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
 import type { ActionResult } from "./types";
 import { businessToday } from "@/lib/business-time";
 
@@ -85,7 +87,8 @@ export async function createContainerAction(input: ContainerInput): Promise<Acti
 
   try {
     const now = new Date();
-    const container = await prisma.container.create({
+    const container = await prisma.$transaction(async (tx) => {
+      const created = await tx.container.create({
       data: {
         ...data,
         bicCode,
@@ -105,6 +108,9 @@ export async function createContainerAction(input: ContainerInput): Promise<Acti
           ],
         },
       },
+    });
+      await audit(tx, { actor: actorOf(session), action: "CONTAINER_CREATE", entityType: "Container", entityId: created.id, summary: `${formatBic(bicCode)} добавлен в парк` });
+      return created;
     });
     revalidatePath("/", "layout");
     return { ok: true, message: `Контейнер ${formatBic(bicCode)} добавлен в парк`, id: container.id };
@@ -162,7 +168,8 @@ export async function updateContainerAction(id: string, input: ContainerInput): 
 
   const becameAvailable = data.operationalStatus === "AVAILABLE" && current.operationalStatus !== "AVAILABLE";
   try {
-    await prisma.container.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.container.update({
       where: { id },
       data: {
         ...data,
@@ -182,6 +189,8 @@ export async function updateContainerAction(id: string, input: ContainerInput): 
             }
           : undefined,
       },
+    });
+      await audit(tx, { actor: actorOf(session), action: "CONTAINER_UPDATE", entityType: "Container", entityId: id, summary: `${formatBic(bicCode)}: карточка обновлена${changes.length ? ` (${changes.join("; ")})` : ""}` });
     });
     revalidatePath("/", "layout");
     return { ok: true, message: "Карточка контейнера сохранена" };
@@ -237,6 +246,7 @@ export async function deleteContainerAction(id: string, input: z.input<typeof wr
           actor: session.name,
         },
       });
+      await audit(tx, { actor: actorOf(session), action: "CONTAINER_WRITE_OFF", entityType: "Container", entityId: id, summary: `${formatBic(container.bicCode)} списан: ${parsed.data.reason}` });
     });
   } catch (error) {
     return serverError("containers", error);
@@ -258,17 +268,26 @@ export async function addContainerEventAction(containerId: string, input: z.inpu
   const { session } = auth;
   const parsed = parseInput(eventSchema, input);
   if (!parsed.ok) return parsed.result;
-  const container = await prisma.container.findUnique({ where: { id: containerId }, select: { currentLocode: true, currentTerminal: true } });
+  const container = await prisma.container.findUnique({ where: { id: containerId }, select: { currentLocode: true, currentTerminal: true, deletedAt: true } });
   if (!container) return notFound("Контейнер");
-  await prisma.containerEvent.create({
-    data: {
-      containerId,
-      ...parsed.data,
-      locode: container.currentLocode,
-      terminal: container.currentTerminal,
-      actor: session.name,
-    },
-  });
+  if (container.deletedAt) return { ok: false, error: "Контейнер списан — журнал только для просмотра" };
+  try {
+    await prisma.$transaction(async (tx) => {
+      const event = await tx.containerEvent.create({
+        data: {
+          containerId,
+          ...parsed.data,
+          amountUsd: parsed.data.amountUsd === null ? null : toDbMoney(parsed.data.amountUsd),
+          locode: container.currentLocode,
+          terminal: container.currentTerminal,
+          actor: session.name,
+        },
+      });
+      await audit(tx, { actor: actorOf(session), action: "CONTAINER_EVENT_ADD", entityType: "ContainerEvent", entityId: event.id, summary: `${EVENT_TYPE_LABELS[parsed.data.type]}: ${parsed.data.description.slice(0, 200)}` });
+    });
+  } catch (error) {
+    return serverError("containers", error);
+  }
   revalidatePath(`/containers/${containerId}`);
   return { ok: true, message: "Событие добавлено в журнал" };
 }

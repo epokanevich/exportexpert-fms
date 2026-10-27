@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { audit } from "@/lib/audit";
 import { businessToday } from "@/lib/business-time";
 import { formatDate, formatUsd } from "@/lib/format";
 
@@ -41,6 +42,7 @@ export async function activateDueLeases(now: Date = new Date()): Promise<number>
           },
         });
       }
+      await audit(tx, { actor: null, action: "LEASE_ACTIVATE", entityType: "LeaseContract", entityId: id, summary: `${lease.contractNumber}: наступила дата On-Hire, договор действует` });
       return true;
     });
     if (done) activated += 1;
