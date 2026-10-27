@@ -14,7 +14,8 @@
     "db:seed": "prisma db seed",
     "db:bootstrap": "tsx prisma/bootstrap.ts",
     "setup": "prisma db push && prisma db seed",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test:int": "vitest run --config vitest.int.config.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

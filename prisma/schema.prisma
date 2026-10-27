@@ -16,7 +16,7 @@ model User {
   id           String   @id @default(cuid())
   email        String   @unique
   name         String
-  role         String   @default("ADMIN") // ADMIN | MANAGER | INSPECTOR
+  role         String   @default("INSPECTOR") // ADMIN | MANAGER | INSPECTOR; по умолчанию — наименее привилегированная (D-30)
   passwordHash String
   createdAt    DateTime @default(now())
 }
@@ -39,25 +39,27 @@ model Container {
   conditionGrade String // IICL6 | CW | WWT | DAMAGED
   techStatus     String // SOUND | DAMAGED | IN_REPAIR | HOLD
   cscPlateExpiry DateTime // КБК / дата следующего освидетельствования (ACEP / PES)
-  eorAmountUsd   Float? // Estimate of Repair
+  eorAmountUsd   Decimal? @db.Decimal(12, 2) // Estimate of Repair
 
   // 3. Дислокация и операционный статус
   operationalStatus    String // AVAILABLE | ONE_WAY | LONG_TERM_LEASE | IN_TRANSIT | MAINTENANCE
   currentLocode        String
   currentTerminal      String
   storageStartDate     DateTime?
-  storageRatePerDayUsd Float?
+  storageRatePerDayUsd Decimal?  @db.Decimal(12, 2)
 
   // 4. Финансы и экономика единицы
   purchaseDate        DateTime
-  purchasePriceUsd    Float
-  currentBookValueUsd Float
-  totalRevenueUsd     Float    @default(0)
-  totalRepairCostUsd  Float    @default(0)
+  purchasePriceUsd    Decimal  @db.Decimal(12, 2)
+  currentBookValueUsd Decimal  @db.Decimal(12, 2)
+  totalRevenueUsd     Decimal  @default(0) @db.Decimal(12, 2)
+  totalRepairCostUsd  Decimal  @default(0) @db.Decimal(12, 2)
 
   notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  /// Мягкое удаление (списание): история и договоры сохраняются, в реестре единица скрыта (фильтр «Списанные»).
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   events      ContainerEvent[]
   oneWayTrips OneWayTrip[]
@@ -65,19 +67,20 @@ model Container {
 
   @@index([operationalStatus])
   @@index([currentLocode])
+  @@index([deletedAt])
 }
 
 // 5. История операций (Audit & Movement Log)
 model ContainerEvent {
   id          String    @id @default(cuid())
   containerId String
-  container   Container @relation(fields: [containerId], references: [id], onDelete: Cascade)
+  container   Container @relation(fields: [containerId], references: [id], onDelete: Restrict)
   type        String // GATE_IN | GATE_OUT | ONE_WAY_OUT | ONE_WAY_IN | LEASE_ON_HIRE | LEASE_OFF_HIRE | INSPECTION | REPAIR_START | REPAIR_DONE | STATUS_CHANGE | PURCHASE | CSC_RENEWAL | LEASE_EXTENDED
   occurredAt  DateTime
   locode      String?
   terminal    String?
   description String
-  amountUsd   Float?
+  amountUsd   Decimal?  @db.Decimal(12, 2)
   actor       String?
   createdAt   DateTime  @default(now())
 
@@ -87,7 +90,7 @@ model ContainerEvent {
 model OneWayTrip {
   id          String    @id @default(cuid())
   containerId String
-  container   Container @relation(fields: [containerId], references: [id], onDelete: Cascade)
+  container   Container @relation(fields: [containerId], references: [id], onDelete: Restrict)
 
   counterpartyName    String
   counterpartyInn     String?
@@ -104,12 +107,12 @@ model OneWayTrip {
   deadlineDate     DateTime // handoverDate + freeDays
   actualReturnDate DateTime? // Gate-In
 
-  feeUsd                 Float @default(0)
-  detentionRatePerDayUsd Float
+  feeUsd                 Decimal @default(0) @db.Decimal(12, 2)
+  detentionRatePerDayUsd Decimal @db.Decimal(12, 2)
 
   status          String // ACTIVE | COMPLETED | DISPUTE  (OVERDUE вычисляется: ACTIVE и дедлайн прошёл)
   returnCondition String? // SOUND | DAMAGED
-  returnEorUsd    Float?
+  returnEorUsd    Decimal? @db.Decimal(12, 2)
   notes           String?
 
   createdAt DateTime @default(now())
@@ -130,9 +133,9 @@ model LeaseContract {
   startDate            DateTime // On-Hire
   endDate              DateTime // плановый Off-Hire
   autoRenewal          Boolean  @default(false)
-  dailyRateUsd         Float // Per Diem за единицу
+  dailyRateUsd         Decimal  @db.Decimal(12, 2) // Per Diem за единицу — действующая ставка (история — LeaseRatePeriod)
   currency             String   @default("USD")
-  depositUsd           Float    @default(0)
+  depositUsd           Decimal  @default(0) @db.Decimal(12, 2)
   paymentStatus        String // PAID | PENDING | OVERDUE (текущий месяц)
   allowedReturnLocodes String // CSV: "RUVVO,RUNVR"
   onHireSurvey         String   @default("SIGNED") // PENDING | SIGNED
@@ -142,19 +145,33 @@ model LeaseContract {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  items LeaseItem[]
+  items       LeaseItem[]
+  ratePeriods LeaseRatePeriod[]
 }
 
 model LeaseItem {
   id           String        @id @default(cuid())
   leaseId      String
-  lease        LeaseContract @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  lease        LeaseContract @relation(fields: [leaseId], references: [id], onDelete: Restrict)
   containerId  String
-  container    Container     @relation(fields: [containerId], references: [id], onDelete: Cascade)
+  container    Container     @relation(fields: [containerId], references: [id], onDelete: Restrict)
   onHireDate   DateTime
   offHireDate  DateTime?
   returnLocode String?
 
   @@index([leaseId])
   @@index([containerId])
+}
+
+/// История ставок Per Diem (D-08): ставка действует с effectiveFrom до начала следующего периода.
+/// Уже начисленные дни не пересчитываются: новый период нельзя начать раньше «сегодня».
+model LeaseRatePeriod {
+  id            String        @id @default(cuid())
+  leaseId       String
+  lease         LeaseContract @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  effectiveFrom DateTime
+  dailyRateUsd  Decimal       @db.Decimal(12, 2)
+  createdAt     DateTime      @default(now())
+
+  @@unique([leaseId, effectiveFrom])
 }
