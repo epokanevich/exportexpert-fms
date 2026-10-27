@@ -7,7 +7,7 @@ type Row = Record<string, unknown>;
 
 /** Фейковый Prisma-клиент: собирает всё, что сид записал бы в БД, без подключения к ней. */
 function createFakePrisma() {
-  const written: Record<string, Row[]> = { container: [], containerEvent: [], oneWayTrip: [], leaseContract: [], leaseItem: [], leaseRatePeriod: [], user: [] };
+  const written: Record<string, Row[]> = { container: [], containerEvent: [], oneWayTrip: [], leaseContract: [], leaseItem: [], leaseRatePeriod: [], user: [], attachment: [], attachmentBlob: [], damageItem: [] };
   const queries: string[] = [];
   const model = (name: string) => ({
     deleteMany: vi.fn(async () => queries.push(`${name}.deleteMany`)),
@@ -29,6 +29,9 @@ function createFakePrisma() {
     leaseContract: model("leaseContract"),
     leaseItem: model("leaseItem"),
     leaseRatePeriod: model("leaseRatePeriod"),
+    attachment: model("attachment"),
+    attachmentBlob: model("attachmentBlob"),
+    damageItem: model("damageItem"),
     user: model("user"),
   };
   const prisma = { $transaction: vi.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)) };
@@ -44,7 +47,7 @@ describe("seedDatabase (batched)", () => {
     expect(summary).toEqual({ containers: 31, events: 270, oneWayTrips: 44, leases: 5 });
     expect(written.container).toHaveLength(31);
     expect(written.leaseItem).toHaveLength(11);
-    expect(queries.length).toBeLessThanOrEqual(15);
+    expect(queries.length).toBeLessThanOrEqual(20);
   });
 
   test("produces valid ISO 6346 numbers and consistent foreign keys", async () => {

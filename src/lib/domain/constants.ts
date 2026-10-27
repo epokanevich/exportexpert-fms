@@ -187,6 +187,15 @@ export function terminalsOf(code: string): readonly string[] {
   return LOCATION_BY_CODE.get(code)?.terminals ?? [];
 }
 
+export const OWNERSHIP_TYPES = ["OWNED", "LEASED_IN", "MANAGED"] as const;
+export type OwnershipType = (typeof OWNERSHIP_TYPES)[number];
+export const OWNERSHIP_TYPE_LABELS: Record<OwnershipType, string> = {
+  OWNED: "Собственный (SOC)",
+  LEASED_IN: "Взят в лизинг",
+  MANAGED: "В управлении",
+};
+export const DEFAULT_OWNER_NAME = "ООО «Экспортэксперт»";
+
 /** Верхняя граница пакета в одном договоре/возврате (D-30): защищает от запроса на тысячи id. */
 export const MAX_LEASE_UNITS = 200;
 

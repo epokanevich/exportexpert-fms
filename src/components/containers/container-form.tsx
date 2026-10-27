@@ -13,6 +13,9 @@ import {
   DEFAULT_WEIGHTS,
   LOCATIONS,
   OPERATIONAL_STATUSES,
+  OWNERSHIP_TYPES,
+  OWNERSHIP_TYPE_LABELS,
+  DEFAULT_OWNER_NAME,
   EDITABLE_OPERATIONAL_STATUSES,
   MANAGED_OPERATIONAL_STATUSES,
   OPERATIONAL_STATUS_LABELS,
@@ -39,6 +42,11 @@ export interface ContainerFormValues {
   conditionGrade: string;
   techStatus: string;
   cscPlateExpiry: string;
+  cscPlateNumber: string;
+  acepNumber: string;
+  ownershipType: string;
+  ownerName: string;
+  lessorName: string;
   eorAmountUsd: string;
   operationalStatus: string;
   currentLocode: string;
@@ -64,6 +72,11 @@ export function emptyContainerForm(): ContainerFormValues {
     conditionGrade: "IICL6",
     techStatus: "SOUND",
     cscPlateExpiry: toLocalDateInput(addDays(today, 365 * 5)),
+    cscPlateNumber: "",
+    acepNumber: "",
+    ownershipType: "OWNED",
+    ownerName: DEFAULT_OWNER_NAME,
+    lessorName: "",
     eorAmountUsd: "",
     operationalStatus: "AVAILABLE",
     currentLocode: "CNSHA",
@@ -249,6 +262,33 @@ export function ContainerForm({ containerId, initial, onDone }: ContainerFormPro
             <Field label="Хранение, $/сутки" htmlFor="storageRate" error={err("storageRatePerDayUsd")}>
               <Input id="storageRate" type="number" inputMode="decimal" step="0.1" min={0} value={values.storageRatePerDayUsd} onChange={(e) => set("storageRatePerDayUsd", e.target.value)} />
             </Field>
+          </div>
+        </fieldset>
+
+        <fieldset className="space-y-3">
+          <legend className="mb-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">Комплаенс и собственник</legend>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Номер таблички CSC" htmlFor="cscPlateNumber" error={err("cscPlateNumber")} hint="Safety Approval">
+              <Input id="cscPlateNumber" name="cscPlateNumber" value={values.cscPlateNumber} placeholder="RS/CSC/1234/2021" onChange={(e) => set("cscPlateNumber", e.target.value)} />
+            </Field>
+            <Field label="Программа ACEP / PES" htmlFor="acepNumber" error={err("acepNumber")}>
+              <Input id="acepNumber" name="acepNumber" value={values.acepNumber} placeholder="ACEP/RS/2021/017" onChange={(e) => set("acepNumber", e.target.value)} />
+            </Field>
+            <Field label="Владение" htmlFor="ownershipType" error={err("ownershipType")}>
+              <Select id="ownershipType" name="ownershipType" value={values.ownershipType} onChange={(e) => set("ownershipType", e.target.value)}>
+                {OWNERSHIP_TYPES.map((t) => (
+                  <option key={t} value={t}>{OWNERSHIP_TYPE_LABELS[t]}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Собственник" htmlFor="ownerName" error={err("ownerName")}>
+              <Input id="ownerName" name="ownerName" value={values.ownerName} onChange={(e) => set("ownerName", e.target.value)} />
+            </Field>
+            {values.ownershipType !== "OWNED" && (
+              <Field label="Лизингодатель" htmlFor="lessorName" error={err("lessorName")} className="col-span-2">
+                <Input id="lessorName" name="lessorName" value={values.lessorName} placeholder="Например: Triton International" onChange={(e) => set("lessorName", e.target.value)} />
+              </Field>
+            )}
           </div>
         </fieldset>
 

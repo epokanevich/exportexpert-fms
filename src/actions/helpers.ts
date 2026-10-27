@@ -46,6 +46,12 @@ export const dateField = z
 
 export const moneyField = z.coerce.number({ error: "Введите число" }).min(0, "Не может быть отрицательным").max(10_000_000, "Слишком большое значение");
 
+/** Необязательная сумма: пустая строка/null → null. Пустая строка проверяется первой: z.coerce.number("") = 0. */
+export const optionalMoneyField = z
+  .union([z.literal("").transform(() => null), z.null(), moneyField])
+  .optional()
+  .transform((v) => v ?? null);
+
 export const optionalText = (max = 500) =>
   z
     .string()

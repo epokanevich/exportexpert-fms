@@ -13,7 +13,8 @@ import { getContainerProfile } from "@/lib/queries/containers";
 import { attentionFlagsOf, unitEconomicsOf } from "@/lib/domain/container";
 import { computeTripTiming } from "@/lib/domain/one-way";
 import { accrueItem } from "@/lib/domain/lease";
-import { CONDITION_GRADE_LABELS, SIZE_TYPE_LABELS, isOneOf, CONDITION_GRADES, SIZE_TYPES, locodeCity, teuOf } from "@/lib/domain/constants";
+import { describeDamage } from "@/lib/domain/damage";
+import { CONDITION_GRADE_LABELS, SIZE_TYPE_LABELS, isOneOf, CONDITION_GRADES, SIZE_TYPES, locodeCity, teuOf, OWNERSHIP_TYPES, OWNERSHIP_TYPE_LABELS } from "@/lib/domain/constants";
 import { formatBic } from "@/lib/iso6346";
 import { toDateInput } from "@/lib/dates";
 import { formatDate, formatDays, formatNumber, formatPercent, formatUsd, plural } from "@/lib/format";
@@ -55,6 +56,11 @@ export default async function ContainerProfilePage({ params }: { params: Params 
     conditionGrade: c.conditionGrade,
     techStatus: c.techStatus,
     cscPlateExpiry: toDateInput(c.cscPlateExpiry),
+    cscPlateNumber: c.cscPlateNumber ?? "",
+    acepNumber: c.acepNumber ?? "",
+    ownershipType: c.ownershipType,
+    ownerName: c.ownerName,
+    lessorName: c.lessorName ?? "",
     eorAmountUsd: c.eorAmountUsd != null ? String(c.eorAmountUsd) : "",
     operationalStatus: c.operationalStatus,
     currentLocode: c.currentLocode,
@@ -140,6 +146,9 @@ export default async function ContainerProfilePage({ params }: { params: Params 
                   { label: "Тара", value: `${formatNumber(c.tareWeightKg)} кг`, mono: true },
                   { label: "Макс. загрузка", value: `${formatNumber(c.maxPayloadKg)} кг`, mono: true },
                   { label: "Брутто (MGW)", value: `${formatNumber(c.maxGrossWeightKg)} кг`, mono: true },
+                  { label: "Владение", value: isOneOf(OWNERSHIP_TYPES, c.ownershipType) ? OWNERSHIP_TYPE_LABELS[c.ownershipType] : c.ownershipType },
+                  { label: "Собственник", value: c.ownerName },
+                  ...(c.lessorName ? [{ label: "Лизингодатель", value: c.lessorName, full: true }] : []),
                 ]}
               />
             </CardContent>
@@ -159,10 +168,24 @@ export default async function ContainerProfilePage({ params }: { params: Params 
                 items={[
                   { label: "Грейд", value: isOneOf(CONDITION_GRADES, c.conditionGrade) ? CONDITION_GRADE_LABELS[c.conditionGrade] : c.conditionGrade },
                   { label: "Тех. статус", value: <TechStatusBadge status={c.techStatus} /> },
-                  { label: "КБК (CSC) / ACEP до", value: formatDate(c.cscPlateExpiry), mono: true },
+                  { label: "Следующее освидетельствование (CSC)", value: formatDate(c.cscPlateExpiry), mono: true },
+                  { label: "Табличка CSC №", value: c.cscPlateNumber ?? "—", mono: true },
+                  { label: "Программа ACEP / PES", value: c.acepNumber ?? "—", mono: true },
                   { label: "EOR (оценка ремонта)", value: c.eorAmountUsd ? formatUsd(c.eorAmountUsd) : "—", mono: true },
                 ]}
               />
+              {c.damages.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-slate-500">Открытые повреждения (CEDEX)</p>
+                  <ul className="space-y-1 text-sm text-slate-700">
+                    {c.damages.map((dmg) => (
+                      <li key={dmg.id} className="rounded-md bg-rose-50/60 px-2.5 py-1.5 font-mono text-xs ring-1 ring-rose-100">
+                        {describeDamage(dmg)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -258,7 +281,7 @@ export default async function ContainerProfilePage({ params }: { params: Params 
         <Card className="xl:row-span-2 xl:self-start">
           <CardHeader icon={<History />} title="История операций" description={`${c.events.length} событий · Audit & Movement Log`} />
           <CardContent>
-            <EventTimeline events={c.events} />
+            <EventTimeline events={c.events} canUpload={!isWrittenOff && can(session.role, "inspection")} />
           </CardContent>
         </Card>
       </div>

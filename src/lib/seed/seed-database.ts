@@ -384,6 +384,10 @@ export interface SeedSummary {
 }
 
 async function clearDomainData(tx: Tx): Promise<void> {
+  // Порядок важен: внешние ключи — ON DELETE RESTRICT (история не удаляется каскадом).
+  await tx.attachment.deleteMany();
+  await tx.attachmentBlob.deleteMany();
+  await tx.damageItem.deleteMany();
   await tx.containerEvent.deleteMany();
   await tx.leaseItem.deleteMany();
   await tx.leaseRatePeriod.deleteMany();

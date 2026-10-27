@@ -11,10 +11,13 @@ import {
   ShoppingCart,
   Undo2,
   Wrench,
+  Paperclip,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 import { EVENT_TYPE_LABELS, isOneOf, EVENT_TYPES, locodeCity } from "@/lib/domain/constants";
-import { formatDateTime, formatUsd } from "@/lib/format";
+import { formatDateTime, formatFileSize, formatUsd } from "@/lib/format";
+import { AttachmentUploader } from "./attachment-uploader";
 import { cn } from "@/lib/utils";
 import type { ContainerEventDto } from "@/lib/queries/containers";
 
@@ -32,14 +35,17 @@ const EVENT_STYLE: Record<string, { icon: LucideIcon; tone: string }> = {
   REPAIR_DONE: { icon: BadgeCheck, tone: "bg-emerald-100 text-emerald-700" },
   STATUS_CHANGE: { icon: Repeat, tone: "bg-slate-100 text-slate-600" },
   CSC_RENEWAL: { icon: ShieldCheck, tone: "bg-teal-100 text-teal-700" },
+  WRITE_OFF: { icon: Trash2, tone: "bg-slate-200 text-slate-700" },
 };
 
 interface EventTimelineProps {
   events: ContainerEventDto[];
   compact?: boolean;
+  /** Показывать кнопку «Файл» у событий (право inspection, контейнер не списан). */
+  canUpload?: boolean;
 }
 
-export function EventTimeline({ events, compact = false }: EventTimelineProps) {
+export function EventTimeline({ events, compact = false, canUpload = false }: EventTimelineProps) {
   if (events.length === 0) return <p className="text-sm text-slate-500">Событий пока нет</p>;
   return (
     <ol className="relative">
@@ -74,6 +80,22 @@ export function EventTimeline({ events, compact = false }: EventTimelineProps) {
                   {event.amountUsd ? <span className="font-mono text-slate-500">{formatUsd(event.amountUsd)}</span> : null}
                 </p>
               )}
+              {!compact && (event.attachments?.length || canUpload) ? (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {event.attachments?.map((a) => (
+                    <a
+                      key={a.id}
+                      href={`/api/attachments/${a.id}`}
+                      target="_blank"
+                      rel="noopener"
+                      className="inline-flex min-h-11 items-center gap-1 rounded-md bg-slate-100 px-2.5 text-xs text-slate-700 hover:bg-slate-200 sm:min-h-8"
+                    >
+                      <Paperclip className="size-3.5" aria-hidden /> {a.fileName} <span className="text-slate-400">· {formatFileSize(a.sizeBytes)}</span>
+                    </a>
+                  ))}
+                  {canUpload && <AttachmentUploader eventId={event.id} label={label} />}
+                </div>
+              ) : null}
             </div>
           </li>
         );

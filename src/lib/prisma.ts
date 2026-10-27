@@ -35,6 +35,7 @@ export function createPrismaClient() {
       },
       leaseContract: { dailyRateUsd: money("dailyRateUsd"), depositUsd: money("depositUsd") },
       leaseRatePeriod: { dailyRateUsd: money("dailyRateUsd") },
+      damageItem: { costUsd: optionalMoney("costUsd") },
     },
   });
 }

@@ -7,7 +7,9 @@ import { CONDITION_GRADES, CONDITION_GRADE_LABELS, TECH_STATUSES, TECH_STATUS_LA
 import { formatBic } from "@/lib/iso6346";
 import { issueBlockReason } from "@/lib/domain/container";
 import { formatDate, formatUsd } from "@/lib/format";
-import { authorize, dateField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText } from "./helpers";
+import { authorize, ConflictError, dateField, locodeField, moneyField, optionalMoneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
+import { damageLineSchema, describeDamage, eorFromDamages, MAX_DAMAGE_LINES } from "@/lib/domain/damage";
+import { toDbMoney } from "@/lib/money";
 import type { ActionResult } from "./types";
 import { businessToday } from "@/lib/business-time";
 
@@ -15,12 +17,14 @@ const inspectionSchema = z
   .object({
     conditionGrade: z.enum(CONDITION_GRADES),
     techStatus: z.enum(TECH_STATUSES),
-    eorUsd: z.union([moneyField, z.literal("").transform(() => null), z.null()]).optional().transform((v) => v ?? null),
+    eorUsd: optionalMoneyField,
     comment: optionalText(1000),
+    damages: z.array(damageLineSchema).max(MAX_DAMAGE_LINES, `Не более ${MAX_DAMAGE_LINES} строк повреждений`).optional().default([]),
   })
+  .transform((v) => ({ ...v, eorUsd: v.eorUsd ?? eorFromDamages(v.damages) }))
   .superRefine((v, ctx) => {
     if ((v.techStatus === "DAMAGED" || v.techStatus === "IN_REPAIR") && !v.eorUsd) {
-      ctx.addIssue({ code: "custom", path: ["eorUsd"], message: "Для повреждённого контейнера укажите EOR" });
+      ctx.addIssue({ code: "custom", path: ["eorUsd"], message: "Для повреждённого контейнера укажите EOR или стоимость по строкам повреждений" });
     }
     if (v.techStatus === "SOUND" && v.conditionGrade === "DAMAGED") {
       ctx.addIssue({ code: "custom", path: ["conditionGrade"], message: "Исправный контейнер не может иметь грейд «Damaged»" });
@@ -30,9 +34,10 @@ const inspectionSchema = z
 export type InspectionInput = z.input<typeof inspectionSchema>;
 
 /**
- * Акт осмотра: фиксирует грейд и тех. статус. Переходы:
+ * Акт осмотра: фиксирует грейд, тех. статус и строки повреждений CEDEX. Переходы:
  *  → IN_REPAIR: контейнер уходит в ремзону (MAINTENANCE);
- *  IN_REPAIR/DAMAGED → SOUND: ремонт закрыт, EOR списывается в затраты на ремонт, контейнер возвращается на сток.
+ *  IN_REPAIR/DAMAGED → SOUND: ремонт закрыт, EOR списывается в затраты на ремонт, открытые повреждения — REPAIRED,
+ *  контейнер возвращается на сток.
  */
 export async function inspectContainerAction(containerId: string, input: InspectionInput): Promise<ActionResult> {
   const auth = await authorize("inspection");
@@ -43,6 +48,7 @@ export async function inspectContainerAction(containerId: string, input: Inspect
   const data = parsed.data;
   const c = await prisma.container.findUnique({ where: { id: containerId } });
   if (!c) return notFound("Контейнер");
+  if (c.deletedAt) return { ok: false, error: "Контейнер списан — операции недоступны" };
 
   const now = new Date();
   const wasBroken = c.techStatus === "DAMAGED" || c.techStatus === "IN_REPAIR";
@@ -50,35 +56,55 @@ export async function inspectContainerAction(containerId: string, input: Inspect
   const repairStarted = data.techStatus === "IN_REPAIR" && c.techStatus !== "IN_REPAIR";
   const onSite = c.operationalStatus === "AVAILABLE" || c.operationalStatus === "MAINTENANCE";
   const repairCost = repairCompleted ? (c.eorAmountUsd ?? 0) : 0;
-
-  const events: { type: string; description: string; amountUsd: number | null }[] = [
-    {
-      type: "INSPECTION",
-      description: `Акт осмотра: грейд ${CONDITION_GRADE_LABELS[data.conditionGrade]}, тех. статус «${TECH_STATUS_LABELS[data.techStatus]}».${data.eorUsd ? ` EOR ${formatUsd(data.eorUsd)}.` : ""}${data.comment ? ` ${data.comment}` : ""}`,
-      amountUsd: data.eorUsd,
-    },
-  ];
-  if (repairStarted) events.push({ type: "REPAIR_START", description: `Передан в ремонт по EOR ${formatUsd(data.eorUsd ?? 0)}.`, amountUsd: data.eorUsd });
-  if (repairCompleted) events.push({ type: "REPAIR_DONE", description: `Ремонт завершён, затраты ${formatUsd(repairCost)}. Контейнер исправен.`, amountUsd: repairCost || null });
+  const damageNote = data.damages.length > 0 ? ` Повреждения (CEDEX): ${data.damages.map(describeDamage).join("; ")}.` : "";
 
   let operationalStatus = c.operationalStatus;
   if (repairStarted && onSite) operationalStatus = "MAINTENANCE";
   if (repairCompleted && c.operationalStatus === "MAINTENANCE") operationalStatus = "AVAILABLE";
+  const at = { occurredAt: now, locode: c.currentLocode, terminal: c.currentTerminal, actor: session.name };
 
-  await prisma.container.update({
-    where: { id: containerId },
-    data: {
-      conditionGrade: data.conditionGrade,
-      techStatus: data.techStatus,
-      eorAmountUsd: data.techStatus === "SOUND" ? null : data.eorUsd,
-      operationalStatus,
-      storageStartDate: operationalStatus === "AVAILABLE" ? (c.operationalStatus === "AVAILABLE" ? c.storageStartDate : businessToday(now)) : null,
-      totalRepairCostUsd: { increment: repairCost },
-      events: {
-        create: events.map((e) => ({ ...e, occurredAt: now, locode: c.currentLocode, terminal: c.currentTerminal, actor: session.name })),
-      },
-    },
-  });
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Условие «техстатус не изменился»: параллельный акт не закроет ремонт и не спишет EOR в затраты дважды.
+      const claimed = await tx.container.updateMany({
+        where: { id: containerId, techStatus: c.techStatus, deletedAt: null },
+        data: {
+          conditionGrade: data.conditionGrade,
+          techStatus: data.techStatus,
+          eorAmountUsd: data.techStatus === "SOUND" || data.eorUsd === null ? null : toDbMoney(data.eorUsd),
+          operationalStatus,
+          storageStartDate: operationalStatus === "AVAILABLE" ? (c.operationalStatus === "AVAILABLE" ? c.storageStartDate : businessToday(now)) : null,
+          totalRepairCostUsd: { increment: toDbMoney(repairCost) },
+        },
+      });
+      if (claimed.count === 0) throw new ConflictError("Состояние контейнера изменил другой акт — обновите страницу");
+      const inspection = await tx.containerEvent.create({
+        data: {
+          ...at,
+          containerId,
+          type: "INSPECTION",
+          description: `Акт осмотра: грейд ${CONDITION_GRADE_LABELS[data.conditionGrade]}, тех. статус «${TECH_STATUS_LABELS[data.techStatus]}».${data.eorUsd ? ` EOR ${formatUsd(data.eorUsd)}.` : ""}${damageNote}${data.comment ? ` ${data.comment}` : ""}`,
+          amountUsd: data.eorUsd === null ? null : toDbMoney(data.eorUsd),
+        },
+      });
+      if (data.damages.length > 0) {
+        await tx.damageItem.createMany({
+          data: data.damages.map((d) => ({ ...d, containerId, eventId: inspection.id, costUsd: d.costUsd === null ? null : toDbMoney(d.costUsd) })),
+        });
+      }
+      if (repairStarted) {
+        await tx.containerEvent.create({ data: { ...at, containerId, type: "REPAIR_START", description: `Передан в ремонт по EOR ${formatUsd(data.eorUsd ?? 0)}.`, amountUsd: data.eorUsd === null ? null : toDbMoney(data.eorUsd) } });
+      }
+      if (repairCompleted) {
+        const repaired = await tx.damageItem.updateMany({ where: { containerId, status: "OPEN" }, data: { status: "REPAIRED", repairedAt: now } });
+        await tx.containerEvent.create({
+          data: { ...at, containerId, type: "REPAIR_DONE", description: `Ремонт завершён, затраты ${formatUsd(repairCost)}.${repaired.count > 0 ? ` Закрыто строк повреждений: ${repaired.count}.` : ""} Контейнер исправен.`, amountUsd: repairCost ? toDbMoney(repairCost) : null },
+        });
+      }
+    });
+  } catch (error) {
+    return serverError("inspector", error);
+  }
   revalidatePath("/", "layout");
   return { ok: true, message: `${formatBic(c.bicCode)}: акт осмотра сохранён${repairCompleted ? ", ремонт закрыт" : repairStarted ? ", передан в ремонт" : ""}` };
 }
@@ -94,7 +120,8 @@ export async function gateInAction(containerId: string, input: z.input<typeof ga
   if (!parsed.ok) return parsed.result;
   const c = await prisma.container.findUnique({ where: { id: containerId } });
   if (!c) return notFound("Контейнер");
-  if (c.operationalStatus === "ONE_WAY" || c.operationalStatus === "LONG_TERM_LEASE") {
+  if (c.deletedAt) return { ok: false, error: "Контейнер списан — операции недоступны" };
+  if (c.operationalStatus === "ONE_WAY" || c.operationalStatus === "LONG_TERM_LEASE" || c.operationalStatus === "RESERVED") {
     return { ok: false, error: "Возврат из One-Way или аренды оформляется в соответствующем модуле" };
   }
   const { locode, terminal } = parsed.data;
@@ -161,6 +188,7 @@ export async function renewCscAction(containerId: string, input: z.input<typeof 
   if (!parsed.ok) return parsed.result;
   const c = await prisma.container.findUnique({ where: { id: containerId } });
   if (!c) return notFound("Контейнер");
+  if (c.deletedAt) return { ok: false, error: "Контейнер списан — операции недоступны" };
   const { cscPlateExpiry } = parsed.data;
   if (cscPlateExpiry <= businessToday()) return { ok: false, error: "Новая дата должна быть в будущем", fieldErrors: { cscPlateExpiry: "Дата в прошлом" } };
   await prisma.container.update({

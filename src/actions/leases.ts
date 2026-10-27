@@ -11,7 +11,7 @@ import { issueBlockReason } from "@/lib/domain/container";
 import { formatBic } from "@/lib/iso6346";
 import { formatDate, formatUsd } from "@/lib/format";
 import { roundMoney, toDbMoney } from "@/lib/money";
-import { authorize, ConflictError, dateField, innField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
+import { authorize, ConflictError, dateField, innField, locodeField, moneyField, optionalMoneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
 import type { ActionResult } from "./types";
 
 const rateField = z.coerce.number({ error: "Введите ставку" }).positive("Ставка должна быть больше 0").max(1000, "Не более $1 000 в сутки");
@@ -212,7 +212,7 @@ const offHireSchema = z
     returnLocode: locodeField,
     terminal: requiredText("депо возврата", 120),
     condition: z.enum(["SOUND", "DAMAGED"]),
-    eorUsd: z.union([moneyField, z.literal("").transform(() => null), z.null()]).optional().transform((v) => v ?? null),
+    eorUsd: optionalMoneyField,
   })
   .superRefine((v, ctx) => {
     if (v.condition === "DAMAGED" && !v.eorUsd) ctx.addIssue({ code: "custom", path: ["eorUsd"], message: "Укажите оценку ремонта (EOR)" });

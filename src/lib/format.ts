@@ -57,6 +57,13 @@ export function formatDateTime(value: Date | string, timeZone: string = business
   return `${get("day")}.${get("month")}.${get("year")} ${get("hour")}:${get("minute")}`;
 }
 
+/** Размер файла: 512 Б, 48 КБ, 2,4 МБ */
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} Б`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`;
+  return `${formatNumber(bytes / (1024 * 1024), 1)} МБ`;
+}
+
 /** Склонение: plural(5, ["день", "дня", "дней"]) → "дней" */
 export function plural(n: number, forms: readonly [string, string, string]): string {
   const abs = Math.abs(n) % 100;

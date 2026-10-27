@@ -10,7 +10,7 @@ import { issueBlockReason } from "@/lib/domain/container";
 import { formatBic } from "@/lib/iso6346";
 import { formatDate, formatUsd } from "@/lib/format";
 import { startOfDayUtc } from "@/lib/dates";
-import { authorize, ConflictError, dateField, innField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
+import { authorize, ConflictError, dateField, innField, locodeField, moneyField, optionalMoneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
 import type { ActionResult } from "./types";
 
 const createTripSchema = z.object({
@@ -100,7 +100,7 @@ const returnSchema = z
     returnDate: dateField,
     terminal: requiredText("терминал приёмки", 120),
     condition: z.enum(["SOUND", "DAMAGED"]),
-    eorUsd: z.union([moneyField, z.literal("").transform(() => null), z.null()]).optional().transform((v) => v ?? null),
+    eorUsd: optionalMoneyField,
     note: optionalText(1000),
   })
   .superRefine((v, ctx) => {

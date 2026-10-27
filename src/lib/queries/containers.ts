@@ -14,6 +14,7 @@ export interface ContainerEventDto {
   description: string;
   amountUsd: number | null;
   actor: string | null;
+  attachments?: { id: string; fileName: string; mimeType: string; sizeBytes: number }[];
 }
 
 export interface ContainerRow {
@@ -103,7 +104,11 @@ export async function getContainerProfile(id: string) {
   return prisma.container.findUnique({
     where: { id },
     include: {
-      events: { orderBy: { occurredAt: "desc" } },
+      events: {
+        orderBy: { occurredAt: "desc" },
+        include: { attachments: { orderBy: { createdAt: "asc" }, select: { id: true, fileName: true, mimeType: true, sizeBytes: true } } },
+      },
+      damages: { where: { status: "OPEN" }, orderBy: { createdAt: "asc" } },
       oneWayTrips: { orderBy: { handoverDate: "desc" } },
       leaseItems: { orderBy: { onHireDate: "desc" }, include: { lease: { include: { ratePeriods: { orderBy: { effectiveFrom: "asc" } } } } } },
     },

@@ -105,7 +105,7 @@ describe("D-21: technical state changes only through the inspection flow", () =>
     bicCode: "FESU 516877-3", sizeType: "20DC", isoCode: "22G1", manufactureYear: 2016, colorRal: "RAL 3020", manufacturer: "DFIC",
     tareWeightKg: 2230, maxGrossWeightKg: 30480, conditionGrade: "DAMAGED", techStatus: "DAMAGED", cscPlateExpiry: "2026-11-07",
     eorAmountUsd: 1240, operationalStatus: "AVAILABLE", currentLocode: "RUMOW", currentTerminal: "ТЛЦ Ворсино", storageRatePerDayUsd: 1.8,
-    purchaseDate: "2016-05-01", purchasePriceUsd: 2650, currentBookValueUsd: 900, notes: "", ...overrides,
+    purchaseDate: "2016-05-01", purchasePriceUsd: 2650, currentBookValueUsd: 900, notes: "", ownershipType: "OWNED", ownerName: "ООО «Экспортэксперт»", ...overrides,
   }) as never;
 
   test("MANAGER cannot mark a damaged container SOUND via «Изменить»", async () => {

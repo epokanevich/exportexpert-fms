@@ -9,6 +9,7 @@ import { roundMoney } from "@/lib/money";
 import {
   CONDITION_GRADES,
   MANUAL_EVENT_TYPES,
+  OWNERSHIP_TYPES,
   MANAGED_OPERATIONAL_STATUSES,
   OPERATIONAL_STATUSES,
   SIZE_TYPES,
@@ -16,7 +17,7 @@ import {
   OPERATIONAL_STATUS_LABELS,
   TECH_STATUS_LABELS,
 } from "@/lib/domain/constants";
-import { authorize, ConflictError, dateField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
+import { authorize, ConflictError, dateField, locodeField, moneyField, optionalMoneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
 import type { ActionResult } from "./types";
 import { businessToday } from "@/lib/business-time";
 
@@ -32,11 +33,16 @@ const baseContainerSchema = z.object({
   conditionGrade: z.enum(CONDITION_GRADES),
   techStatus: z.enum(TECH_STATUSES),
   cscPlateExpiry: dateField,
-  eorAmountUsd: z.union([moneyField, z.literal("").transform(() => null), z.null()]).optional().transform((v) => v ?? null),
+  cscPlateNumber: optionalText(60),
+  acepNumber: optionalText(60),
+  ownershipType: z.enum(OWNERSHIP_TYPES, { error: "Выберите тип владения" }),
+  ownerName: requiredText("собственник", 200),
+  lessorName: optionalText(200),
+  eorAmountUsd: optionalMoneyField,
   operationalStatus: z.enum(OPERATIONAL_STATUSES),
   currentLocode: locodeField,
   currentTerminal: requiredText("терминал / депо", 120),
-  storageRatePerDayUsd: z.union([moneyField, z.literal("").transform(() => null), z.null()]).optional().transform((v) => v ?? null),
+  storageRatePerDayUsd: optionalMoneyField,
   purchaseDate: dateField,
   purchasePriceUsd: moneyField,
   currentBookValueUsd: moneyField,
@@ -48,6 +54,9 @@ const containerSchema = baseContainerSchema.superRefine((value, ctx) => {
   if (!bic.valid) ctx.addIssue({ code: "custom", path: ["bicCode"], message: bic.errors[0] ?? "Некорректный номер" });
   if (value.tareWeightKg >= value.maxGrossWeightKg) {
     ctx.addIssue({ code: "custom", path: ["tareWeightKg"], message: "Тара должна быть меньше брутто" });
+  }
+  if (value.ownershipType !== "OWNED" && !value.lessorName) {
+    ctx.addIssue({ code: "custom", path: ["lessorName"], message: "Укажите лизингодателя / собственника" });
   }
   if (value.currentBookValueUsd > value.purchasePriceUsd) {
     ctx.addIssue({ code: "custom", path: ["currentBookValueUsd"], message: "Остаточная стоимость не может превышать цену покупки" });
@@ -240,7 +249,7 @@ const eventSchema = z.object({
   type: z.enum(MANUAL_EVENT_TYPES, { error: "Этот тип события создаётся только операцией" }),
   occurredAt: dateField,
   description: requiredText("описание", 1000),
-  amountUsd: z.union([moneyField, z.literal("").transform(() => null), z.null()]).optional().transform((v) => v ?? null),
+  amountUsd: optionalMoneyField,
 });
 
 export async function addContainerEventAction(containerId: string, input: z.input<typeof eventSchema>): Promise<ActionResult> {

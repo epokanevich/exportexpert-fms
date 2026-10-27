@@ -24,3 +24,6 @@ Thumbs.db
 
 # Локальные настройки Claude Code (превью dev-сервера)
 .claude/
+
+# Вложения локального драйвера хранилища (ATTACHMENTS_DRIVER=local)
+.data/
