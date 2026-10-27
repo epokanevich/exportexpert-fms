@@ -5,9 +5,11 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { validateBic, formatBic } from "@/lib/iso6346";
 import { startOfDayUtc } from "@/lib/dates";
+import { roundMoney } from "@/lib/money";
 import {
   CONDITION_GRADES,
   MANUAL_EVENT_TYPES,
+  MANAGED_OPERATIONAL_STATUSES,
   OPERATIONAL_STATUSES,
   SIZE_TYPES,
   TECH_STATUSES,
@@ -16,6 +18,7 @@ import {
 } from "@/lib/domain/constants";
 import { authorize, ConflictError, dateField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
 import type { ActionResult } from "./types";
+import { businessToday } from "@/lib/business-time";
 
 const baseContainerSchema = z.object({
   bicCode: z.string().trim(),
@@ -53,8 +56,8 @@ const containerSchema = baseContainerSchema.superRefine((value, ctx) => {
 
 export type ContainerInput = z.input<typeof baseContainerSchema>;
 
-/** Операционные статусы, которые управляются только через модули One-Way / аренды. */
-const MANAGED_STATUSES = new Set(["ONE_WAY", "LONG_TERM_LEASE"]);
+/** Операционные статусы, которые назначаются только операциями (One-Way, аренда, резерв, списание). */
+const MANAGED_STATUSES = new Set<string>(MANAGED_OPERATIONAL_STATUSES);
 
 export async function createContainerAction(input: ContainerInput): Promise<ActionResult> {
   const auth = await authorize("fleet:edit");
@@ -78,7 +81,7 @@ export async function createContainerAction(input: ContainerInput): Promise<Acti
         ...data,
         bicCode,
         maxPayloadKg: data.maxGrossWeightKg - data.tareWeightKg,
-        storageStartDate: data.operationalStatus === "AVAILABLE" ? startOfDayUtc(now) : null,
+        storageStartDate: data.operationalStatus === "AVAILABLE" ? businessToday(now) : null,
         events: {
           create: [
             {
@@ -112,6 +115,21 @@ export async function updateContainerAction(id: string, input: ContainerInput): 
 
   const current = await prisma.container.findUnique({ where: { id } });
   if (!current) return notFound("Контейнер");
+  if (current.deletedAt) return { ok: false, error: "Контейнер списан — карточка доступна только для просмотра" };
+
+  // D-21: техсостояние и КБК меняются только актом осмотра / продлением КБК (с записью в журнал), не правкой карточки.
+  const inspectionOnly: Record<string, string> = {};
+  if (data.techStatus !== current.techStatus) inspectionOnly.techStatus = "Меняется актом осмотра";
+  if (data.conditionGrade !== current.conditionGrade) inspectionOnly.conditionGrade = "Меняется актом осмотра";
+  if ((data.eorAmountUsd === null ? null : roundMoney(data.eorAmountUsd)) !== current.eorAmountUsd) inspectionOnly.eorAmountUsd = "Меняется актом осмотра";
+  if (startOfDayUtc(data.cscPlateExpiry).getTime() !== startOfDayUtc(current.cscPlateExpiry).getTime()) inspectionOnly.cscPlateExpiry = "Меняется кнопкой «Продлить КБК»";
+  if (Object.keys(inspectionOnly).length > 0) {
+    return {
+      ok: false,
+      error: "Тех. статус, грейд, EOR и срок КБК меняются только через акт осмотра или продление КБК — так изменение попадает в журнал",
+      fieldErrors: inspectionOnly,
+    };
+  }
 
   const statusChangedToManaged = data.operationalStatus !== current.operationalStatus && MANAGED_STATUSES.has(data.operationalStatus);
   const leavingManaged = data.operationalStatus !== current.operationalStatus && MANAGED_STATUSES.has(current.operationalStatus);
@@ -141,7 +159,7 @@ export async function updateContainerAction(id: string, input: ContainerInput): 
         ...data,
         bicCode,
         maxPayloadKg: data.maxGrossWeightKg - data.tareWeightKg,
-        storageStartDate: data.operationalStatus !== "AVAILABLE" ? null : becameAvailable ? startOfDayUtc(new Date()) : current.storageStartDate,
+        storageStartDate: data.operationalStatus !== "AVAILABLE" ? null : becameAvailable ? businessToday() : current.storageStartDate,
         events: changes.length
           ? {
               create: {

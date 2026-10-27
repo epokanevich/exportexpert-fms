@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { businessToday, calendarDateIn, latestBusinessDate, resolveTimeZone } from "./business-time";
+import { formatDateTime } from "./format";
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
@@ -36,5 +37,10 @@ describe("business time zone (D-28)", () => {
     const evening = new Date("2026-10-26T15:30:00.000Z"); // 18:30 МСК 26.10, 01:30 Владивосток 27.10
     expect(latestBusinessDate(evening, "Europe/Moscow")).toEqual(d("2026-10-27"));
     expect(businessToday(evening, "Europe/Moscow")).toEqual(d("2026-10-26"));
+  });
+
+  test("event timestamps are printed in the business zone", () => {
+    expect(formatDateTime(new Date("2026-10-26T21:30:00.000Z"), "Europe/Moscow")).toBe("27.10.2026 00:30");
+    expect(formatDateTime(new Date("2026-10-26T23:50:00.000Z"), "Asia/Vladivostok")).toBe("27.10.2026 09:50");
   });
 });

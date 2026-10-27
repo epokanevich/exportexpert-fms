@@ -8,8 +8,9 @@ import { computeTripTiming } from "@/lib/domain/one-way";
 import { SIZE_TYPE_LABELS, TRIP_STATUS_LABELS, isOneOf, SIZE_TYPES, locodeCity } from "@/lib/domain/constants";
 import { formatBic } from "@/lib/iso6346";
 import { formatDate, formatDateTime, formatDays, formatNumber, formatUsd } from "@/lib/format";
-import { businessToday } from "@/lib/business-time";
+import { businessTimeZone, businessToday } from "@/lib/business-time";
 import { mulRate } from "@/lib/money";
+import { FREE_TIME_CONVENTION, FREE_TIME_CONVENTION_LABELS } from "@/lib/domain/one-way";
 
 type Params = Promise<{ id: string }>;
 
@@ -117,7 +118,8 @@ export default async function ReleaseOrderPage({ params }: { params: Params }) {
             <Term label="Фикс. ставка / депозит" value={trip.feeUsd > 0 ? formatUsd(trip.feeUsd, 2) : "Без оплаты"} />
           </section>
           <p className="mt-2 text-xs text-slate-600">
-            Пример начисления детеншна:{" "}
+            Free Time: {FREE_TIME_CONVENTION_LABELS[FREE_TIME_CONVENTION]}; {formatDate(trip.deadlineDate)} — последний бесплатный день,
+            детеншн начисляется за каждые сутки после него, включая день Gate-In. Пример начисления детеншна:{" "}
             {DETENTION_EXAMPLES.map((d) => `${formatDays(d)} — ${formatUsd(mulRate(trip.detentionRatePerDayUsd, d))}`).join(" · ")}.
           </p>
 
@@ -151,7 +153,7 @@ export default async function ReleaseOrderPage({ params }: { params: Params }) {
           </section>
 
           <footer className="mt-10 border-t border-slate-200 pt-3 text-[11px] text-slate-400">
-            Сформировано в FMS «Экспортэксперт» {formatDateTime(now)} (МСК) · {session.name} · документ {trip.bookingRef}
+            Сформировано в FMS «Экспортэксперт» {formatDateTime(new Date())} ({businessTimeZone()}) · {session.name} · документ {trip.bookingRef}
           </footer>
         </article>
       </main>

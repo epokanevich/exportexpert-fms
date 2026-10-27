@@ -11,6 +11,7 @@ import { addDays, parseDateInput, toLocalDateInput } from "@/lib/dates";
 import { formatBic } from "@/lib/iso6346";
 import { formatDate } from "@/lib/format";
 import type { IssuableContainer } from "@/lib/queries/containers";
+import { computeDeadline, FREE_TIME_CONVENTION, FREE_TIME_CONVENTION_LABELS } from "@/lib/domain/one-way";
 
 const FREE_DAYS_PRESETS = [14, 21, 30, 45];
 
@@ -33,7 +34,7 @@ export function NewTripForm({ containers, onDone, presetContainerId }: { contain
   const set = (key: keyof typeof v, value: string) => setV((prev) => ({ ...prev, [key]: value }));
   const selected = containers.find((c) => c.id === v.containerId);
   const handover = parseDateInput(v.handoverDate);
-  const deadline = handover && Number(v.freeDays) > 0 ? addDays(handover, Number(v.freeDays)) : null;
+  const deadline = handover && Number(v.freeDays) > 0 ? computeDeadline(handover, Number(v.freeDays)) : null;
 
   const blockedCount = containers.filter((c) => c.blockReason).length;
   if (containers.length === blockedCount) {
@@ -111,7 +112,7 @@ export function NewTripForm({ containers, onDone, presetContainerId }: { contain
             {d} дн.
           </button>
         ))}
-        {deadline && <span className="ml-auto self-center text-xs text-slate-500">Дедлайн возврата: <b className="font-mono text-slate-900">{formatDate(deadline)}</b></span>}
+        {deadline && <span className="ml-auto self-center text-xs text-slate-500" title={`Free Time: ${FREE_TIME_CONVENTION_LABELS[FREE_TIME_CONVENTION]}`}>Последний бесплатный день: <b className="font-mono text-slate-900">{formatDate(deadline)}</b></span>}
       </div>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Фикс. ставка / депозит, $" htmlFor="nt-fee" error={fieldErrors.feeUsd} hint="0 — бесплатная выдача">

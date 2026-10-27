@@ -40,7 +40,7 @@ export async function createOneWayAction(input: CreateTripInput): Promise<Action
 
   const container = await prisma.container.findUnique({ where: { id: data.containerId } });
   if (!container) return notFound("Контейнер");
-  const blockReason = issueBlockReason(container, new Date());
+  const blockReason = issueBlockReason(container, businessToday());
   if (blockReason) {
     return { ok: false, error: `${formatBic(container.bicCode)}: выдача запрещена — ${blockReason}`, fieldErrors: { containerId: blockReason } };
   }
@@ -124,7 +124,7 @@ export async function registerOneWayReturnAction(tripId: string, input: TripRetu
   if (data.returnDate < startOfDayUtc(trip.handoverDate)) return { ok: false, error: "Дата возврата раньше даты выдачи", fieldErrors: { returnDate: "Раньше даты выдачи" } };
   if (data.returnDate > latestBusinessDate(new Date())) return { ok: false, error: "Дата возврата не может быть в будущем", fieldErrors: { returnDate: "Дата в будущем" } };
 
-  const timing = computeTripTiming({ ...trip, status: "COMPLETED", actualReturnDate: data.returnDate }, new Date());
+  const timing = computeTripTiming({ ...trip, status: "COMPLETED", actualReturnDate: data.returnDate }, businessToday());
   const isDamaged = data.condition === "DAMAGED";
   const detentionNote = timing.overdueDays > 0 ? ` Просрочка ${timing.overdueDays} дн., начислен детеншн ${formatUsd(timing.detentionUsd)}.` : " Возврат в пределах свободных дней.";
 

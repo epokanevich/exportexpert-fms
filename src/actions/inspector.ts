@@ -3,13 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { startOfDayUtc } from "@/lib/dates";
 import { CONDITION_GRADES, CONDITION_GRADE_LABELS, TECH_STATUSES, TECH_STATUS_LABELS, locodeCity } from "@/lib/domain/constants";
 import { formatBic } from "@/lib/iso6346";
 import { issueBlockReason } from "@/lib/domain/container";
 import { formatDate, formatUsd } from "@/lib/format";
 import { authorize, dateField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText } from "./helpers";
 import type { ActionResult } from "./types";
+import { businessToday } from "@/lib/business-time";
 
 const inspectionSchema = z
   .object({
@@ -72,7 +72,7 @@ export async function inspectContainerAction(containerId: string, input: Inspect
       techStatus: data.techStatus,
       eorAmountUsd: data.techStatus === "SOUND" ? null : data.eorUsd,
       operationalStatus,
-      storageStartDate: operationalStatus === "AVAILABLE" ? (c.operationalStatus === "AVAILABLE" ? c.storageStartDate : startOfDayUtc(now)) : null,
+      storageStartDate: operationalStatus === "AVAILABLE" ? (c.operationalStatus === "AVAILABLE" ? c.storageStartDate : businessToday(now)) : null,
       totalRepairCostUsd: { increment: repairCost },
       events: {
         create: events.map((e) => ({ ...e, occurredAt: now, locode: c.currentLocode, terminal: c.currentTerminal, actor: session.name })),
@@ -106,7 +106,7 @@ export async function gateInAction(containerId: string, input: z.input<typeof ga
       operationalStatus: nextStatus,
       currentLocode: locode,
       currentTerminal: terminal,
-      storageStartDate: nextStatus === "AVAILABLE" ? startOfDayUtc(now) : null,
+      storageStartDate: nextStatus === "AVAILABLE" ? businessToday(now) : null,
       events: { create: { type: "GATE_IN", occurredAt: now, locode, terminal, description: `Gate-In: принят на ${terminal} (${locodeCity(locode)}).`, actor: session.name } },
     },
   });
@@ -126,7 +126,7 @@ export async function gateOutAction(containerId: string, input: z.input<typeof g
   const c = await prisma.container.findUnique({ where: { id: containerId } });
   if (!c) return notFound("Контейнер");
   const now = new Date();
-  const blockReason = issueBlockReason(c, now);
+  const blockReason = issueBlockReason(c, businessToday(now));
   if (blockReason) return { ok: false, error: `Gate-Out запрещён: ${blockReason}` };
   const { destinationLocode, note } = parsed.data;
   await prisma.container.update({
@@ -162,7 +162,7 @@ export async function renewCscAction(containerId: string, input: z.input<typeof 
   const c = await prisma.container.findUnique({ where: { id: containerId } });
   if (!c) return notFound("Контейнер");
   const { cscPlateExpiry } = parsed.data;
-  if (cscPlateExpiry <= new Date()) return { ok: false, error: "Новая дата должна быть в будущем", fieldErrors: { cscPlateExpiry: "Дата в прошлом" } };
+  if (cscPlateExpiry <= businessToday()) return { ok: false, error: "Новая дата должна быть в будущем", fieldErrors: { cscPlateExpiry: "Дата в прошлом" } };
   await prisma.container.update({
     where: { id: containerId },
     data: {

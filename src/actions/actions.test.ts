@@ -26,7 +26,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("@/lib/auth/dal", () => ({ requireSession: vi.fn(async () => session) }));
 
-import { deleteContainerAction } from "./containers";
+import { deleteContainerAction, updateContainerAction } from "./containers";
 import { createOneWayAction, registerOneWayReturnAction, resolveDisputeAction } from "./one-way";
 import { extendLeaseAction, offHireAction } from "./leases";
 
@@ -91,6 +91,44 @@ describe("role checks on the server", () => {
     prismaMock.user.findUnique.mockResolvedValue(null);
     const result = await deleteContainerAction("c1", { reason: "Списание" });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("D-21: technical state changes only through the inspection flow", () => {
+  const damaged = {
+    id: "c1", bicCode: "FESU5168773", sizeType: "20DC", isoCode: "22G1", manufactureYear: 2016, colorRal: "RAL 3020", manufacturer: "DFIC",
+    tareWeightKg: 2230, maxGrossWeightKg: 30480, conditionGrade: "DAMAGED", techStatus: "DAMAGED", cscPlateExpiry: d("2026-11-07"),
+    eorAmountUsd: 1240, operationalStatus: "AVAILABLE", currentLocode: "RUMOW", currentTerminal: "ТЛЦ Ворсино", storageRatePerDayUsd: 1.8,
+    purchaseDate: d("2016-05-01"), purchasePriceUsd: 2650, currentBookValueUsd: 900, notes: null, deletedAt: null, storageStartDate: d("2026-10-22"),
+  };
+  const form = (overrides: Record<string, unknown> = {}) => ({
+    bicCode: "FESU 516877-3", sizeType: "20DC", isoCode: "22G1", manufactureYear: 2016, colorRal: "RAL 3020", manufacturer: "DFIC",
+    tareWeightKg: 2230, maxGrossWeightKg: 30480, conditionGrade: "DAMAGED", techStatus: "DAMAGED", cscPlateExpiry: "2026-11-07",
+    eorAmountUsd: 1240, operationalStatus: "AVAILABLE", currentLocode: "RUMOW", currentTerminal: "ТЛЦ Ворсино", storageRatePerDayUsd: 1.8,
+    purchaseDate: "2016-05-01", purchasePriceUsd: 2650, currentBookValueUsd: 900, notes: "", ...overrides,
+  }) as never;
+
+  test("MANAGER cannot mark a damaged container SOUND via «Изменить»", async () => {
+    actAs("MANAGER");
+    prismaMock.container.findUnique.mockResolvedValue(damaged);
+    const result = await updateContainerAction("c1", form({ techStatus: "SOUND", conditionGrade: "CW", eorAmountUsd: "" }));
+    expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ error: expect.stringMatching(/акт осмотра/) });
+    expect(prismaMock.container.update).not.toHaveBeenCalled();
+  });
+
+  test("the CSC date cannot be moved by editing the card either (only «Продлить КБК»)", async () => {
+    prismaMock.container.findUnique.mockResolvedValue(damaged);
+    const result = await updateContainerAction("c1", form({ cscPlateExpiry: "2029-01-01" }));
+    expect(result.ok).toBe(false);
+    expect(prismaMock.container.update).not.toHaveBeenCalled();
+  });
+
+  test("passport and location edits without touching the technical state are still allowed", async () => {
+    prismaMock.container.findUnique.mockResolvedValue(damaged);
+    prismaMock.container.update.mockResolvedValue(damaged);
+    const result = await updateContainerAction("c1", form({ colorRal: "RAL 5013", notes: "Перекрашен" }));
+    expect(result).toMatchObject({ ok: true });
   });
 });
 

@@ -3,6 +3,8 @@
  * (исключает рассинхрон гидрации из-за разных пробелов-разделителей).
  */
 
+import { businessTimeZone } from "./business-time";
+
 const THIN_SPACE = " ";
 
 function groupThousands(integer: string): string {
@@ -46,12 +48,13 @@ export function formatDateShort(value: Date | string | null | undefined): string
   return `${d.getUTCDate()} ${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
-const MOSCOW_OFFSET_MS = 3 * 3_600_000;
-
-/** Дата и время события по Москве: 26.10.2026 14:30 */
-export function formatDateTime(value: Date | string): string {
-  const d = new Date(new Date(value).getTime() + MOSCOW_OFFSET_MS);
-  return `${formatDate(d)} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+/** Дата и время события в бизнес-поясе (BUSINESS_TIMEZONE, по умолчанию МСК): 26.10.2026 14:30. Только серверный код. */
+export function formatDateTime(value: Date | string, timeZone: string = businessTimeZone()): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date(value));
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("day")}.${get("month")}.${get("year")} ${get("hour")}:${get("minute")}`;
 }
 
 /** Склонение: plural(5, ["день", "дня", "дней"]) → "дней" */

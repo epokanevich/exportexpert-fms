@@ -11,6 +11,7 @@ import { DEFAULT_ISO_CODE, DEFAULT_WEIGHTS, locodeCity, terminalsOf } from "@/li
 import { buildBic } from "@/lib/iso6346";
 import { formatDate } from "@/lib/format";
 import { rentalDaysInRange } from "@/lib/domain/lease";
+import { computeDeadline } from "@/lib/domain/one-way";
 import { mulRate, roundMoney } from "@/lib/money";
 import {
   ACTIVE_TRIPS,
@@ -432,7 +433,7 @@ export async function seedDatabase(prisma: AppPrismaClient, now: Date = new Date
       dropoffTerminal: trip.dropoff[1],
       handoverDate: handover,
       freeDays: trip.freeDays,
-      deadlineDate: addDays(handover, trip.freeDays),
+      deadlineDate: computeDeadline(handover, trip.freeDays),
       feeUsd: trip.feeUsd,
       detentionRatePerDayUsd: trip.detentionRate,
       status: "ACTIVE",

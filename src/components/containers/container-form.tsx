@@ -13,6 +13,8 @@ import {
   DEFAULT_WEIGHTS,
   LOCATIONS,
   OPERATIONAL_STATUSES,
+  EDITABLE_OPERATIONAL_STATUSES,
+  MANAGED_OPERATIONAL_STATUSES,
   OPERATIONAL_STATUS_LABELS,
   SIZE_TYPES,
   SIZE_TYPE_LABELS,
@@ -85,7 +87,10 @@ export function ContainerForm({ containerId, initial, onDone }: ContainerFormPro
   const { run, isPending, fieldErrors } = useServerAction();
   const isEdit = Boolean(containerId);
   const bic = validateBic(values.bicCode);
-  const isManaged = values.operationalStatus === "ONE_WAY" || values.operationalStatus === "LONG_TERM_LEASE";
+  const isManaged = isOneOf(MANAGED_OPERATIONAL_STATUSES, values.operationalStatus);
+  /** D-21: в режиме правки техсостояние и КБК меняются только актом осмотра / продлением КБК. */
+  const techLocked = isEdit;
+  const techHint = techLocked ? "Меняется актом осмотра" : undefined;
   const terminals = terminalsOf(values.currentLocode);
   const payload = Number(values.maxGrossWeightKg) - Number(values.tareWeightKg);
 
@@ -186,35 +191,35 @@ export function ContainerForm({ containerId, initial, onDone }: ContainerFormPro
         <fieldset className="space-y-3">
           <legend className="mb-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">Техническое состояние</legend>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Грейд" htmlFor="grade" error={err("conditionGrade")}>
-              <Select id="grade" value={values.conditionGrade} onChange={(e) => set("conditionGrade", e.target.value)}>
+            <Field label="Грейд" htmlFor="grade" error={err("conditionGrade")} hint={techHint}>
+              <Select id="grade" name="conditionGrade" value={values.conditionGrade} disabled={techLocked} onChange={(e) => set("conditionGrade", e.target.value)}>
                 {CONDITION_GRADES.map((g) => (
                   <option key={g} value={g}>{CONDITION_GRADE_LABELS[g]}</option>
                 ))}
               </Select>
             </Field>
-            <Field label="Тех. статус" htmlFor="tech" error={err("techStatus")}>
-              <Select id="tech" value={values.techStatus} onChange={(e) => set("techStatus", e.target.value)}>
+            <Field label="Тех. статус" htmlFor="tech" error={err("techStatus")} hint={techHint}>
+              <Select id="tech" name="techStatus" value={values.techStatus} disabled={techLocked} onChange={(e) => set("techStatus", e.target.value)}>
                 {TECH_STATUSES.map((t) => (
                   <option key={t} value={t}>{TECH_STATUS_LABELS[t]}</option>
                 ))}
               </Select>
             </Field>
-            <Field label="КБК (CSC) действует до" htmlFor="csc" error={err("cscPlateExpiry")}>
-              <Input id="csc" type="date" value={values.cscPlateExpiry} onChange={(e) => set("cscPlateExpiry", e.target.value)} />
+            <Field label="КБК (CSC) действует до" htmlFor="csc" error={err("cscPlateExpiry")} hint={techLocked ? "Меняется кнопкой «Продлить КБК»" : undefined}>
+              <Input id="csc" name="cscPlateExpiry" type="date" value={values.cscPlateExpiry} disabled={techLocked} onChange={(e) => set("cscPlateExpiry", e.target.value)} />
             </Field>
-            <Field label="EOR, $" htmlFor="eor" error={err("eorAmountUsd")} hint="Оценка ремонта">
-              <Input id="eor" type="number" inputMode="decimal" min={0} value={values.eorAmountUsd} onChange={(e) => set("eorAmountUsd", e.target.value)} />
+            <Field label="EOR, $" htmlFor="eor" error={err("eorAmountUsd")} hint={techLocked ? "Меняется актом осмотра" : "Оценка ремонта"}>
+              <Input id="eor" name="eorAmountUsd" type="number" inputMode="decimal" min={0} step="0.01" value={values.eorAmountUsd} disabled={techLocked} onChange={(e) => set("eorAmountUsd", e.target.value)} />
             </Field>
           </div>
         </fieldset>
 
         <fieldset className="space-y-3">
           <legend className="mb-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">Дислокация</legend>
-          <Field label="Операционный статус" htmlFor="op" error={err("operationalStatus")} hint={isManaged ? "Управляется модулем One-Way / аренды" : undefined}>
+          <Field label="Операционный статус" htmlFor="op" error={err("operationalStatus")} hint={isManaged ? "Управляется модулем One-Way / аренды / списанием" : undefined}>
             <Select id="op" value={values.operationalStatus} onChange={(e) => set("operationalStatus", e.target.value)} disabled={isEdit && isManaged}>
-              {OPERATIONAL_STATUSES.map((s) => (
-                <option key={s} value={s} disabled={(s === "ONE_WAY" || s === "LONG_TERM_LEASE") && !isManaged}>
+              {(isManaged ? OPERATIONAL_STATUSES : EDITABLE_OPERATIONAL_STATUSES).map((s) => (
+                <option key={s} value={s}>
                   {OPERATIONAL_STATUS_LABELS[s]}
                 </option>
               ))}
