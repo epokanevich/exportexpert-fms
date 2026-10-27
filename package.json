@@ -6,16 +6,17 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
-    "vercel-build": "prisma generate && prisma db push --skip-generate && tsx prisma/bootstrap.ts && next build",
+    "vercel-build": "prisma generate && tsx scripts/migrate-deploy.ts && tsx prisma/bootstrap.ts && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:push": "prisma db push",
     "db:seed": "prisma db seed",
     "db:bootstrap": "tsx prisma/bootstrap.ts",
-    "setup": "prisma db push && prisma db seed",
+    "setup": "tsx scripts/migrate-deploy.ts && prisma db seed",
     "postinstall": "prisma generate",
-    "test:int": "vitest run --config vitest.int.config.ts"
+    "test:int": "vitest run --config vitest.int.config.ts",
+    "db:migrate": "tsx scripts/migrate-deploy.ts",
+    "render-build": "npm run vercel-build"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
