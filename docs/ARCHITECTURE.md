@@ -54,6 +54,8 @@ scripts/                  ← migrate-deploy.ts (baseline + deploy), preflight-p
   дислокация, экономика; `deletedAt` — мягкое списание.
 - **ContainerEvent** — журнал (14 типов + WRITE_OFF); к событию — **DamageItem** (строки CEDEX) и **Attachment**.
 - **OneWayTrip** — выдача A → B: free days, **последний бесплатный день** (`deadlineDate`, хранится), ставка детеншна, результат приёмки.
+  Правило Free Time — «день Gate-Out = день 1» (`FREE_TIME_CONVENTION` в `domain/one-way.ts`, утверждено 27.10.2026);
+  для старых рейсов правило восстанавливается из сохранённого дедлайна (`conventionOfTrip`) и печатается в Release Order.
 - **LeaseContract** + **LeaseItem** + **LeaseRatePeriod** — договор, единицы с On-Hire/Off-Hire, история ставок Per Diem.
 - **AuditLog** — кто (`userId`, имя), когда, что (`action`, сущность, сводка, детали JSON).
 - **LoginAttempt** — счётчики неудачных входов (ключи `ip|email` и `ip|*`).

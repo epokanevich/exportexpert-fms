@@ -34,12 +34,21 @@ export interface TripTiming {
  * не меняет сроки и детеншн уже выданных рейсов.
  */
 export type FreeTimeConvention = "DAY_AFTER_GATE_OUT" | "GATE_OUT_DAY_IS_DAY_1";
-export const FREE_TIME_CONVENTION: FreeTimeConvention = "DAY_AFTER_GATE_OUT";
+/** Утверждено заказчиком 27.10.2026: отраслевая норма для новых рейсов; выданные ранее рейсы хранят свой дедлайн. */
+export const FREE_TIME_CONVENTION: FreeTimeConvention = "GATE_OUT_DAY_IS_DAY_1";
 
 export const FREE_TIME_CONVENTION_LABELS: Record<FreeTimeConvention, string> = {
   DAY_AFTER_GATE_OUT: "день 1 — следующий день после Gate-Out",
   GATE_OUT_DAY_IS_DAY_1: "день Gate-Out — день 1",
 };
+
+/** По какой конвенции выдан рейс — из сохранённого дедлайна (null — дедлайн задан иначе). Для Release Order старых рейсов. */
+export function conventionOfTrip(handoverDate: Date, freeDays: number, deadlineDate: Date): FreeTimeConvention | null {
+  const span = diffDays(handoverDate, deadlineDate);
+  if (span === freeDays) return "DAY_AFTER_GATE_OUT";
+  if (span === freeDays - 1) return "GATE_OUT_DAY_IS_DAY_1";
+  return null;
+}
 
 /** Последний бесплатный день. Детеншн начисляется за каждые сутки после него, включая день Gate-In. */
 export function computeDeadline(handoverDate: Date, freeDays: number, convention: FreeTimeConvention = FREE_TIME_CONVENTION): Date {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { computeDeadline, computeTripTiming, FREE_TIME_CONVENTION } from "./one-way";
+import { computeDeadline, computeTripTiming, conventionOfTrip, FREE_TIME_CONVENTION } from "./one-way";
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 const ON_27_OCT = new Date("2026-10-27T09:00:00.000Z");
@@ -40,8 +40,18 @@ describe("D-20 Free Time convention (one switch, both conventions tested)", () =
     expect(t.freeDaysUsedRatio).toBeCloseTo(0.1);
   });
 
+  test("approved 27.10.2026: new trips use the industry norm (Gate-Out day is day 1)", () => {
+    expect(FREE_TIME_CONVENTION).toBe("GATE_OUT_DAY_IS_DAY_1");
+    expect(computeDeadline(EXEX.handoverDate, EXEX.freeDays)).toEqual(d("2026-10-19"));
+  });
+
+  test("the Release Order states the rule a trip was actually issued under (old trips keep their stored deadline)", () => {
+    expect(conventionOfTrip(d("2026-09-05"), 45, d("2026-10-20"))).toBe("DAY_AFTER_GATE_OUT");
+    expect(conventionOfTrip(d("2026-09-05"), 45, d("2026-10-19"))).toBe("GATE_OUT_DAY_IS_DAY_1");
+    expect(conventionOfTrip(d("2026-09-05"), 45, d("2026-10-25"))).toBeNull(); // дедлайн изменён вручную
+  });
+
   test("the default convention is a single constant", () => {
-    expect(["DAY_AFTER_GATE_OUT", "GATE_OUT_DAY_IS_DAY_1"]).toContain(FREE_TIME_CONVENTION);
     expect(computeDeadline(EXEX.handoverDate, EXEX.freeDays)).toEqual(computeDeadline(EXEX.handoverDate, EXEX.freeDays, FREE_TIME_CONVENTION));
   });
 });

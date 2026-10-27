@@ -10,7 +10,7 @@ import { formatBic } from "@/lib/iso6346";
 import { formatDate, formatDateTime, formatDays, formatNumber, formatUsd } from "@/lib/format";
 import { businessTimeZone, businessToday } from "@/lib/business-time";
 import { mulRate } from "@/lib/money";
-import { FREE_TIME_CONVENTION, FREE_TIME_CONVENTION_LABELS } from "@/lib/domain/one-way";
+import { conventionOfTrip, FREE_TIME_CONVENTION_LABELS } from "@/lib/domain/one-way";
 
 type Params = Promise<{ id: string }>;
 
@@ -37,6 +37,8 @@ export default async function ReleaseOrderPage({ params }: { params: Params }) {
 
   const now = businessToday();
   const timing = computeTripTiming(trip, now);
+  // Правило — то, по которому рейс выдан (дедлайн хранится в рейсе), а не текущая настройка.
+  const freeTimeRule = conventionOfTrip(trip.handoverDate, trip.freeDays, trip.deadlineDate);
   const { container } = trip;
   const sizeLabel = isOneOf(SIZE_TYPES, container.sizeType) ? SIZE_TYPE_LABELS[container.sizeType] : container.sizeType;
   const bic = formatBic(container.bicCode);
@@ -118,7 +120,7 @@ export default async function ReleaseOrderPage({ params }: { params: Params }) {
             <Term label="Фикс. ставка / депозит" value={trip.feeUsd > 0 ? formatUsd(trip.feeUsd, 2) : "Без оплаты"} />
           </section>
           <p className="mt-2 text-xs text-slate-600">
-            Free Time: {FREE_TIME_CONVENTION_LABELS[FREE_TIME_CONVENTION]}; {formatDate(trip.deadlineDate)} — последний бесплатный день,
+            {freeTimeRule ? `Free Time: ${FREE_TIME_CONVENTION_LABELS[freeTimeRule]}; ` : ""}{formatDate(trip.deadlineDate)} — последний бесплатный день,
             детеншн начисляется за каждые сутки после него, включая день Gate-In. Пример начисления детеншна:{" "}
             {DETENTION_EXAMPLES.map((d) => `${formatDays(d)} — ${formatUsd(mulRate(trip.detentionRatePerDayUsd, d))}`).join(" · ")}.
           </p>
