@@ -12,11 +12,12 @@ const VARIANTS = {
   warning: "bg-amber-400 text-slate-950 shadow-sm hover:bg-amber-500",
 } as const;
 
+/** D-17: на телефоне и планшете (< lg) все кнопки не ниже 44 px; на ПК — прежняя плотность. */
 const SIZES = {
-  sm: "h-8 px-3 text-xs gap-1.5 rounded-md",
-  md: "h-10 px-4 text-sm gap-2 rounded-lg",
+  sm: "h-11 lg:h-8 px-3 text-xs gap-1.5 rounded-md",
+  md: "h-11 lg:h-10 px-4 text-sm gap-2 rounded-lg",
   lg: "h-12 px-5 text-base gap-2 rounded-xl",
-  icon: "h-10 w-10 rounded-lg",
+  icon: "size-11 lg:size-10 rounded-lg",
 } as const;
 
 export type ButtonVariant = keyof typeof VARIANTS;

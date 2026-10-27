@@ -72,7 +72,7 @@ export function Sheet({ open, onClose, title, description, children, footer, siz
           <button
             type="button"
             onClick={onClose}
-            className="-mr-2 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="-mr-2 flex size-11 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
             aria-label="Закрыть"
           >
             <X className="size-5" />

@@ -17,6 +17,7 @@ import { locodeCity } from "@/lib/domain/constants";
 import { normalizeBic } from "@/lib/iso6346";
 import { formatDate, formatDays, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { formatBic } from "@/lib/iso6346";
 import type { TripRow } from "@/lib/queries/operations";
 import type { IssuableContainer } from "@/lib/queries/containers";
 import { sumMoney } from "@/lib/money";
@@ -109,7 +110,7 @@ export function OneWayBoard({ trips, issuable, focusId }: OneWayBoardProps) {
               aria-selected={tab === t.id}
               onClick={() => setTab(t.id)}
               className={cn(
-                "flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors lg:min-h-9",
                 tab === t.id ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50",
               )}
             >
@@ -155,7 +156,17 @@ export function OneWayBoard({ trips, issuable, focusId }: OneWayBoardProps) {
                 {visible.map((t) => (
                   <tr key={t.id} className={cn("cursor-pointer hover:bg-slate-50/80", t.id === focusId && "bg-indigo-50/50", t.timing.status === "OVERDUE" && "bg-rose-50/40")} onClick={() => setDetailId(t.id)}>
                     <td className="px-4 py-3">
-                      <BicCode code={t.bicCode} />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDetailId(t.id);
+                        }}
+                        className="-m-1 rounded p-1 text-left focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none"
+                        aria-label={`Карточка рейса ${t.bookingRef}, контейнер ${formatBic(t.bicCode)}`}
+                      >
+                        <BicCode code={t.bicCode} />
+                      </button>
                       <p className="font-mono text-xs text-slate-500">{t.sizeType}</p>
                     </td>
                     <td className="max-w-52 px-3 py-3">

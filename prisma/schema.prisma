@@ -57,7 +57,7 @@ model Container {
   id String @id @default(cuid())
 
   // 1. Паспорт и идентификация
-  bicCode          String @unique // ISO 6346 без разделителей: EXEX4029183
+  bicCode          String @unique // ISO 6346 без разделителей: EXPU4029189
   sizeType         String // 20DC | 20HQ | 40DC | 40HC | 40HR | 20OT | 40FR
   isoCode          String // 22G1, 45G1, 45R1 …
   manufactureYear  Int

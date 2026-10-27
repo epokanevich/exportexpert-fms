@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, ClipboardCheck, FileText, MapPin, PackageCheck, ScanLine, Search, ShieldCheck, X } from "lucide-react";
 import { Card, EmptyState, Input } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/sheet";
@@ -22,12 +23,16 @@ interface TerminalInspectorProps {
   tripsByContainer: Record<string, GateInTrip>;
   leaseByContainer: Record<string, { id: string; contractNumber: string }>;
   initialId?: string;
+  initialQuery?: string;
 }
 
 const MAX_RESULTS = 8;
 
-export function TerminalInspector({ rows, tripsByContainer, leaseByContainer, initialId }: TerminalInspectorProps) {
-  const [q, setQ] = useState("");
+const SEARCH_DEBOUNCE_MS = 250;
+
+export function TerminalInspector({ rows, tripsByContainer, leaseByContainer, initialId, initialQuery = "" }: TerminalInspectorProps) {
+  const router = useRouter();
+  const [q, setQ] = useState(initialQuery);
   const [selectedId, setSelectedId] = useState<string | null>(initialId ?? null);
   const [action, setAction] = useState<ActionSheet | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -37,6 +42,14 @@ export function TerminalInspector({ rows, tripsByContainer, leaseByContainer, in
     if (!needle) return [];
     return rows.filter((r) => r.bicCode.includes(needle)).slice(0, MAX_RESULTS);
   }, [rows, q]);
+
+  // Совпадения ищет сервер: номер уходит в URL (?q=), страница возвращает только найденные единицы.
+  useEffect(() => {
+    const needle = normalizeBic(q);
+    if (needle === normalizeBic(initialQuery)) return;
+    const id = setTimeout(() => router.replace(needle ? `/inspector?q=${encodeURIComponent(needle)}` : "/inspector", { scroll: false }), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  }, [q, initialQuery, router]);
 
   const selected = rows.find((r) => r.id === selectedId) ?? null;
   const closeAction = () => setAction(null);
@@ -157,7 +170,7 @@ export function TerminalInspector({ rows, tripsByContainer, leaseByContainer, in
           inputMode="text"
         />
         {q && (
-          <button type="button" onClick={() => setQ("")} className="absolute top-1/2 right-3 -translate-y-1/2 rounded-full p-2 text-slate-400" aria-label="Очистить">
+          <button type="button" onClick={() => setQ("")} className="absolute top-1/2 right-1 flex size-11 -translate-y-1/2 items-center justify-center rounded-full text-slate-400" aria-label="Очистить поиск">
             <X className="size-5" />
           </button>
         )}

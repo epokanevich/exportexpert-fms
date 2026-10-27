@@ -108,7 +108,7 @@ export function NewTripForm({ containers, onDone, presetContainerId }: { contain
       </div>
       <div className="-mt-1 flex flex-wrap gap-1.5">
         {FREE_DAYS_PRESETS.map((d) => (
-          <button key={d} type="button" onClick={() => set("freeDays", String(d))} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-indigo-100 hover:text-indigo-700">
+          <button key={d} type="button" onClick={() => set("freeDays", String(d))} className="inline-flex min-h-11 items-center rounded-full bg-slate-100 px-3 text-xs font-medium text-slate-600 hover:bg-indigo-100 hover:text-indigo-700 lg:min-h-7">
             {d} дн.
           </button>
         ))}

@@ -22,7 +22,7 @@ const GUIDE: readonly GuideItem[] = [
   {
     icon: ShieldAlert,
     title: "Авто-блокировка выдачи по КБК (CSC)",
-    text: "EXEX 401890-8 исправен, но табличка просрочена — недоступен для One-Way, аренды и Gate-Out.",
+    text: "EXPU 401890-2 исправен, но табличка просрочена — недоступен для One-Way, аренды и Gate-Out.",
     target: "/one-way",
     tone: "bg-rose-50 text-rose-600",
   },

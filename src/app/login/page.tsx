@@ -46,7 +46,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             ))}
           </ul>
         </div>
-        <p className="relative font-mono text-xs text-slate-500">EXEX · FESU · TKRU · RZDU — ISO 6346</p>
+        <p className="relative font-mono text-xs text-slate-500">EXPU · FESU · TKRU · RZDU — ISO 6346</p>
       </section>
 
       <section className="flex items-center justify-center bg-slate-50 px-5 py-10 sm:px-10">

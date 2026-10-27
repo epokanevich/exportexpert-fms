@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { businessToday } from "@/lib/business-time";
 import { attentionFlagsOf, issueBlockReason, unitEconomicsOf, type CscState } from "@/lib/domain/container";
@@ -48,56 +49,59 @@ export interface ContainerRow {
 
 const RECENT_EVENTS = 4;
 
-export async function getContainerRows(now: Date): Promise<ContainerRow[]> {
-  const containers = await prisma.container.findMany({
-    where: { deletedAt: null },
-    orderBy: { bicCode: "asc" },
-    include: {
-      events: { orderBy: { occurredAt: "desc" }, take: RECENT_EVENTS },
-      oneWayTrips: { where: { status: "ACTIVE" }, take: 1 },
-      leaseItems: { where: { offHireDate: null, lease: { status: { in: ["ACTIVE", "SCHEDULED"] } } }, include: { lease: true }, take: 1 },
-    },
-  });
+export const rowInclude = {
+  events: { orderBy: { occurredAt: "desc" as const }, take: RECENT_EVENTS },
+  oneWayTrips: { where: { status: "ACTIVE" }, take: 1 },
+  leaseItems: { where: { offHireDate: null, lease: { status: { in: ["ACTIVE", "SCHEDULED"] } } }, include: { lease: true }, take: 1 },
+};
 
-  return containers.map((c) => {
-    const flags = attentionFlagsOf(c, now);
-    const trip = c.oneWayTrips[0];
-    const leaseItem = c.leaseItems[0];
-    const activity = trip
-      ? `${trip.bookingRef} → ${locodeCity(trip.dropoffLocode)}`
-      : leaseItem
-        ? `${leaseItem.lease.contractNumber} · ${leaseItem.lease.lesseeName}`
-        : null;
-    const activityHref = trip ? `/one-way?focus=${trip.id}` : leaseItem ? `/leases/${leaseItem.lease.id}` : null;
+type ContainerWithActivity = Awaited<ReturnType<typeof prisma.container.findMany<{ include: typeof rowInclude }>>>[number];
 
-    return {
-      id: c.id,
-      bicCode: c.bicCode,
-      sizeType: c.sizeType,
-      isoCode: c.isoCode,
-      manufactureYear: c.manufactureYear,
-      manufacturer: c.manufacturer,
-      conditionGrade: c.conditionGrade,
-      techStatus: c.techStatus,
-      operationalStatus: c.operationalStatus,
-      currentLocode: c.currentLocode,
-      currentTerminal: c.currentTerminal,
-      cscPlateExpiry: c.cscPlateExpiry,
-      csc: flags.csc,
-      idleDays: flags.storage.idleDays,
-      isIdleTooLong: flags.storage.isIdleTooLong,
-      storageCostUsd: flags.storage.storageCostUsd,
-      eorAmountUsd: c.eorAmountUsd,
-      roi: unitEconomicsOf(c).roi,
-      totalRevenueUsd: c.totalRevenueUsd,
-      needsAttention: flags.any,
-      needsRepair: flags.needsRepair,
-      activity,
-      activityHref,
-      tripTiming: trip ? computeTripTiming(trip, now) : null,
-      recentEvents: c.events,
-    };
-  });
+/** Строка реестра: статусы и экономика — из доменных функций, одна точка истины с дашбордом. */
+export function toContainerRow(c: ContainerWithActivity, now: Date): ContainerRow {
+  const flags = attentionFlagsOf(c, now);
+  const trip = c.oneWayTrips[0];
+  const leaseItem = c.leaseItems[0];
+  const activity = trip
+    ? `${trip.bookingRef} → ${locodeCity(trip.dropoffLocode)}`
+    : leaseItem
+      ? `${leaseItem.lease.contractNumber} · ${leaseItem.lease.lesseeName}`
+      : null;
+  const activityHref = trip ? `/one-way?focus=${trip.id}` : leaseItem ? `/leases/${leaseItem.lease.id}` : null;
+
+  return {
+    id: c.id,
+    bicCode: c.bicCode,
+    sizeType: c.sizeType,
+    isoCode: c.isoCode,
+    manufactureYear: c.manufactureYear,
+    manufacturer: c.manufacturer,
+    conditionGrade: c.conditionGrade,
+    techStatus: c.techStatus,
+    operationalStatus: c.operationalStatus,
+    currentLocode: c.currentLocode,
+    currentTerminal: c.currentTerminal,
+    cscPlateExpiry: c.cscPlateExpiry,
+    csc: flags.csc,
+    idleDays: flags.storage.idleDays,
+    isIdleTooLong: flags.storage.isIdleTooLong,
+    storageCostUsd: flags.storage.storageCostUsd,
+    eorAmountUsd: c.eorAmountUsd,
+    roi: unitEconomicsOf(c).roi,
+    totalRevenueUsd: c.totalRevenueUsd,
+    needsAttention: flags.any,
+    needsRepair: flags.needsRepair,
+    activity,
+    activityHref,
+    tripTiming: trip ? computeTripTiming(trip, now) : null,
+    recentEvents: c.events,
+  };
+}
+
+/** Все действующие единицы (инспектор, CSV-выгрузка). Для реестра — постраничный searchRegistry(). */
+export async function getContainerRows(now: Date, where: Prisma.ContainerWhereInput = {}): Promise<ContainerRow[]> {
+  const containers = await prisma.container.findMany({ where: { deletedAt: null, ...where }, orderBy: { bicCode: "asc" }, include: rowInclude });
+  return containers.map((c) => toContainerRow(c, now));
 }
 
 export async function getContainerProfile(id: string) {

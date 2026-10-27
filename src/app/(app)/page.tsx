@@ -7,7 +7,8 @@ import { RegionChart, StatusChart } from "@/components/dashboard/fleet-charts";
 import { prisma } from "@/lib/prisma";
 import { sumMoney } from "@/lib/money";
 import { computeFleetKpi } from "@/lib/domain/fleet";
-import { getContainerRows } from "@/lib/queries/containers";
+import { searchRegistry } from "@/lib/queries/registry";
+import { DEFAULT_REGISTRY_QUERY } from "@/lib/queries/registry-params";
 import { getLeaseRows, getTripRows } from "@/lib/queries/operations";
 import { locodeCity, teuOf } from "@/lib/domain/constants";
 import { formatDateShort, formatDays, formatPercent, formatUsd } from "@/lib/format";
@@ -23,7 +24,7 @@ export default async function DashboardPage() {
     prisma.oneWayTrip.findMany({ where: { status: "ACTIVE" } }),
     getTripRows(now),
     getLeaseRows(now),
-    getContainerRows(now),
+    searchRegistry({ ...DEFAULT_REGISTRY_QUERY, attention: true }, now).then((r) => r.rows),
   ]);
   const kpi = computeFleetKpi(containers, activeTrips, leases, now);
 

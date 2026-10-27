@@ -61,7 +61,7 @@ const BASE_PRICE: Record<string, number> = {
   "20DC": 2650, "20HQ": 3100, "40DC": 3900, "40HC": 4350, "40HR": 14200, "20OT": 3700, "40FR": 6600,
 };
 const RAL_BY_PREFIX: Record<string, string> = {
-  EXEX: "RAL 5013 (кобальтовый синий)",
+  EXPU: "RAL 5013 (кобальтовый синий)",
   FESU: "RAL 3020 (транспортный красный)",
   TKRU: "RAL 7035 (светло-серый)",
   RZDU: "RAL 6005 (зелёный мох)",

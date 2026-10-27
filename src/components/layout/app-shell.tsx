@@ -171,7 +171,7 @@ export function AppShell({ user, badges, canReset, children }: AppShellProps) {
         <button
           type="button"
           onClick={() => setProfileOpen(true)}
-          className="flex size-10 items-center justify-center rounded-full bg-indigo-50 text-sm font-semibold text-indigo-700 ring-1 ring-indigo-100"
+          className="flex size-11 items-center justify-center rounded-full bg-indigo-50 text-sm font-semibold text-indigo-700 ring-1 ring-indigo-100"
         >
           {initials(user.name) || <UserRound className="size-5" aria-hidden />}
           <span className="sr-only"> профиль и настройки</span>

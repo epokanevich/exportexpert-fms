@@ -8,6 +8,9 @@ import { parseDateInput } from "@/lib/dates";
 import { describeDbError } from "@/lib/db-errors";
 import type { ActionResult } from "./types";
 
+// 4.3: сообщения Zod по умолчанию (поля без своего текста) — на русском, а не на английском.
+z.config(z.locales.ru());
+
 export type Parsed<T> = { ok: true; data: T } | { ok: false; result: ActionResult };
 
 export type Authorized = { ok: true; session: SessionPayload } | { ok: false; result: ActionResult };

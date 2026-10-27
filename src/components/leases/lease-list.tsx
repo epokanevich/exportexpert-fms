@@ -80,7 +80,7 @@ export function LeaseList({ leases, issuable }: { leases: LeaseRow[]; issuable: 
                 role="tab"
                 aria-selected={tab === t.id}
                 onClick={() => setTab(t.id)}
-                className={cn("flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium", tab === t.id ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50")}
+                className={cn("flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium lg:min-h-9", tab === t.id ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50")}
               >
                 {t.label}
                 <span className={cn("rounded px-1.5 font-mono text-xs", tab === t.id ? "bg-white/20" : "bg-slate-100")}>{count}</span>

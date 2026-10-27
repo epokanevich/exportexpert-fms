@@ -70,7 +70,7 @@ export function StatusChart({ data, total }: StatusChartProps) {
       <ul className="w-full space-y-1.5">
         {data.map((d) => (
           <li key={d.status}>
-            <Link href={`/containers?status=${d.status}`} className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50">
+            <Link href={`/containers?status=${d.status}`} className="flex min-h-11 items-center gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50 lg:min-h-8">
               <span className="size-2.5 rounded-sm" style={{ background: STATUS_COLORS[d.status] }} aria-hidden />
               <span className="flex-1 text-slate-600">{OPERATIONAL_STATUS_LABELS[d.status]}</span>
               <span className="font-mono font-medium text-slate-900 tabular">{d.units}</span>

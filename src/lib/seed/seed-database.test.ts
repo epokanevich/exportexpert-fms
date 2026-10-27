@@ -60,6 +60,8 @@ describe("seedDatabase (batched)", () => {
     expect(containerIds.size).toBe(31);
     expect(new Set(written.container.map((c) => c.bicCode)).size).toBe(31);
     expect(written.container.every((c) => validateBic(c.bicCode as string).valid)).toBe(true);
+    // 4.5 (D-26): 4-й символ — категория U; приложение не предупреждает на собственных демо-данных.
+    expect(written.container.flatMap((c) => validateBic(c.bicCode as string).warnings)).toEqual([]);
     expect(written.containerEvent.every((e) => containerIds.has(e.containerId as string))).toBe(true);
     expect(written.oneWayTrip.every((t) => containerIds.has(t.containerId as string))).toBe(true);
     expect(written.leaseItem.every((i) => containerIds.has(i.containerId as string) && leaseIds.has(i.leaseId as string))).toBe(true);

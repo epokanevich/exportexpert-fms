@@ -62,6 +62,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("4.3: validation messages are in Russian", () => {
+  test("a value outside an enum gets a Russian message, not the Zod default in English", async () => {
+    const result = await offHireAction("l1", { itemIds: ["i1"], returnDate: "2026-10-26", returnLocode: "RULED", terminal: "ПКТ", condition: "BROKEN" as never });
+    expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ error: expect.stringMatching(/^Неверный вариант/) });
+  });
+});
+
 describe("role checks on the server", () => {
   test("INSPECTOR cannot write off a container", async () => {
     actAs("INSPECTOR");

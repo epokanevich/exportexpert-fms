@@ -144,7 +144,7 @@ export function ContainerForm({ containerId, initial, onDone }: ContainerFormPro
               id="bicCode"
               value={values.bicCode}
               onChange={(e) => set("bicCode", e.target.value.toUpperCase())}
-              placeholder="EXEX 402918-4"
+              placeholder="EXPU 402918-9"
               className="font-mono text-base tracking-wide uppercase"
               aria-invalid={values.bicCode.length > 0 && !bic.valid}
               autoComplete="off"
@@ -161,7 +161,7 @@ export function ContainerForm({ containerId, initial, onDone }: ContainerFormPro
                 <p className="flex items-center gap-1.5">
                   <TriangleAlert className="size-3.5" /> {bic.errors[0]}
                   {bic.expectedCheckDigit !== null && (
-                    <button type="button" className="ml-auto font-medium underline" onClick={() => set("bicCode", formatBic(bic.normalized.slice(0, 10) + bic.expectedCheckDigit))}>
+                    <button type="button" className="ml-auto inline-flex min-h-11 items-center px-1 font-medium underline lg:min-h-0" onClick={() => set("bicCode", formatBic(bic.normalized.slice(0, 10) + bic.expectedCheckDigit))}>
                       Подставить
                     </button>
                   )}

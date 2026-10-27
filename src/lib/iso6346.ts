@@ -19,7 +19,7 @@ const LETTER_VALUES: Readonly<Record<string, number>> = (() => {
 const STANDARD_CATEGORY_IDS = ["U", "J", "Z"] as const;
 const BIC_PATTERN = /^([A-Z]{4})(\d{6})(\d)?$/;
 
-/** Убирает пробелы, дефисы и приводит к верхнему регистру: "exex 402918-3" → "EXEX4029183". */
+/** Убирает пробелы, дефисы и приводит к верхнему регистру: "expu 402918-9" → "EXPU4029189". */
 export function normalizeBic(raw: string): string {
   return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -39,7 +39,7 @@ export function computeCheckDigit(first10: string): number {
   return (sum % 11) % 10;
 }
 
-/** Собирает полный номер с контрольной цифрой: ("EXEX", "402918") → "EXEX4029183". */
+/** Собирает полный номер с контрольной цифрой: ("EXPU", "402918") → "EXPU4029189". */
 export function buildBic(ownerPrefix: string, serial: string): string {
   const base = `${ownerPrefix.toUpperCase()}${serial}`;
   return `${base}${computeCheckDigit(base)}`;
@@ -83,7 +83,7 @@ export function validateBic(raw: string): BicValidation {
   return result;
 }
 
-/** Отображение: "EXEX4029183" → "EXEX 402918-3". */
+/** Отображение: "EXPU4029189" → "EXPU 402918-9". */
 export function formatBic(normalized: string): string {
   const code = normalizeBic(normalized);
   if (code.length !== 11) return code;

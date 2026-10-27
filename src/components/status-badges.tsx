@@ -122,7 +122,7 @@ export function LeaseExpiryBadge({ level, daysToEnd }: { level: LeaseExpiryLevel
   }
 }
 
-/** Номер контейнера моноширинным шрифтом: EXEX 402918-3 (контрольная цифра выделена). */
+/** Номер контейнера моноширинным шрифтом: EXPU 402918-9 (контрольная цифра выделена). */
 export function BicCode({ code, className, size = "md" }: { code: string; className?: string; size?: "sm" | "md" | "lg" | "xl" }) {
   const formatted = formatBic(code);
   const [main, check] = formatted.split("-");
