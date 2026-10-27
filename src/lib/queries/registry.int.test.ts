@@ -4,7 +4,7 @@ vi.mock("server-only", () => ({}));
 
 import { prisma } from "@/lib/prisma";
 import { buildBic } from "@/lib/iso6346";
-import { searchRegistry } from "./registry";
+import { searchRegistry, searchRegistryAll } from "./registry";
 import { DEFAULT_REGISTRY_QUERY, REGISTRY_PAGE_SIZE, type RegistryQuery } from "./registry-params";
 import { createContainer, resetDomain } from "../../../test/fixtures";
 
@@ -74,5 +74,20 @@ describe("server-side registry search (4.4)", () => {
   test("the trigram GIN index exists for the substring search", async () => {
     const idx = await prisma.$queryRaw<{ indexdef: string }[]>`SELECT indexdef FROM pg_indexes WHERE indexname = 'Container_bicCode_trgm_idx'`;
     expect(idx[0]?.indexdef).toContain("gin_trgm_ops");
+  });
+
+  test("CSV export returns the whole filtered selection in the current order, not one page", async () => {
+    const all = await searchRegistryAll(q({ locode: "RUVVO", sort: "bicCode", dir: "desc" }), TODAY);
+    expect(all.length).toBeGreaterThan(REGISTRY_PAGE_SIZE);
+    expect(all.every((r) => r.currentLocode === "RUVVO")).toBe(true);
+    expect(all.map((r) => r.bicCode)).toEqual([...all.map((r) => r.bicCode)].sort().reverse());
+  });
+
+  test("every sort key works on the server", async () => {
+    for (const sort of ["sizeType", "operationalStatus", "currentLocode", "csc", "idle"] as const) {
+      const r = await searchRegistry(q({ sort, dir: "desc" }), TODAY);
+      expect(r.rows).toHaveLength(REGISTRY_PAGE_SIZE);
+    }
+    expect((await searchRegistry(q({ size: "40HC", grade: "CW", tech: "SOUND" }), TODAY)).total).toBe(121);
   });
 });

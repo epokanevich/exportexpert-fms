@@ -8,7 +8,7 @@ vi.mock("@/lib/auth/dal", async () => {
 });
 
 import { prisma } from "@/lib/prisma";
-import { inspectContainerAction } from "./inspector";
+import { gateInAction, gateOutAction, inspectContainerAction, renewCscAction } from "./inspector";
 import { createContainer, createUser, resetDomain } from "../../test/fixtures";
 import { actAsUser } from "../../test/session-mock";
 
@@ -63,5 +63,50 @@ describe("inspection with CEDEX damage lines (2.5)", () => {
     });
     expect(result.ok).toBe(false);
     expect(await prisma.damageItem.count()).toBe(0);
+  });
+});
+
+describe("terminal operations (Gate-In / Gate-Out / CSC) with audit", () => {
+  test("Gate-Out of a sound unit on stock, then Gate-In at another depot", async () => {
+    const c = await createContainer(prisma);
+    expect(await gateOutAction(c.id, { destinationLocode: "RUMOW", note: "ж/д" })).toMatchObject({ ok: true });
+    expect((await prisma.container.findUniqueOrThrow({ where: { id: c.id } })).operationalStatus).toBe("IN_TRANSIT");
+    // повторный Gate-Out того же контейнера — уже не на стоке
+    expect((await gateOutAction(c.id, { destinationLocode: "RUMOW" })).ok).toBe(false);
+
+    expect(await gateInAction(c.id, { locode: "RUMOW", terminal: "ТЛЦ Ворсино" })).toMatchObject({ ok: true });
+    const unit = await prisma.container.findUniqueOrThrow({ where: { id: c.id } });
+    expect(unit).toMatchObject({ operationalStatus: "AVAILABLE", currentLocode: "RUMOW", currentTerminal: "ТЛЦ Ворсино" });
+    expect(await prisma.auditLog.count({ where: { entityId: c.id, action: { in: ["GATE_OUT", "GATE_IN"] } } })).toBe(2);
+  });
+
+  test("Gate-Out is refused for an expired CSC plate; renewal unlocks it", async () => {
+    const c = await createContainer(prisma, { cscPlateExpiry: new Date("2026-01-01T00:00:00Z") });
+    const blocked = await gateOutAction(c.id, { destinationLocode: "RUMOW" });
+    expect(blocked).toMatchObject({ ok: false, error: expect.stringMatching(/КБК/) });
+
+    expect((await renewCscAction(c.id, { cscPlateExpiry: "2020-01-01" })).ok).toBe(false); // дата в прошлом
+    expect(await renewCscAction(c.id, { cscPlateExpiry: "2031-06-30" })).toMatchObject({ ok: true });
+    expect(await gateOutAction(c.id, { destinationLocode: "RUMOW" })).toMatchObject({ ok: true });
+  });
+
+  test("Gate-In refuses units in One-Way, lease or written off", async () => {
+    const inTrip = await createContainer(prisma, { operationalStatus: "ONE_WAY", storageStartDate: null });
+    expect((await gateInAction(inTrip.id, { locode: "RUMOW", terminal: "ТЛЦ" })).ok).toBe(false);
+    const off = await createContainer(prisma, { operationalStatus: "WRITTEN_OFF", deletedAt: new Date() });
+    expect((await gateInAction(off.id, { locode: "RUMOW", terminal: "ТЛЦ" })).ok).toBe(false);
+    expect((await renewCscAction(off.id, { cscPlateExpiry: "2031-06-30" })).ok).toBe(false);
+    expect((await inspectContainerAction(off.id, { techStatus: "SOUND", conditionGrade: "CW", eorUsd: "" })).ok).toBe(false);
+    expect((await gateInAction("missing", { locode: "RUMOW", terminal: "ТЛЦ" })).ok).toBe(false);
+  });
+
+  test("a unit sent to repair goes to MAINTENANCE; Gate-In keeps it there", async () => {
+    const c = await createContainer(prisma);
+    expect(await inspectContainerAction(c.id, { techStatus: "IN_REPAIR", conditionGrade: "DAMAGED", eorUsd: "300" })).toMatchObject({ ok: true });
+    const unit = await prisma.container.findUniqueOrThrow({ where: { id: c.id }, include: { events: true } });
+    expect(unit.operationalStatus).toBe("MAINTENANCE");
+    expect(unit.events.map((e) => e.type)).toEqual(expect.arrayContaining(["INSPECTION", "REPAIR_START"]));
+    expect(await gateInAction(c.id, { locode: "RUVVO", terminal: "ПКТ" })).toMatchObject({ ok: true });
+    expect((await prisma.container.findUniqueOrThrow({ where: { id: c.id } })).operationalStatus).toBe("MAINTENANCE");
   });
 });
