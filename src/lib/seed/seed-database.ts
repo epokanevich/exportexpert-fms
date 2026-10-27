@@ -303,8 +303,9 @@ function buildContainer(spec: ContainerSpec, ctx: BuildContext): ContainerBuild 
       { type: "INSPECTION", occurredAt: new Date(addDays(onHire, -1).getTime() + 14 * 3_600_000), locode, terminal, description: `On-Hire Survey по договору ${lease.contractNumber}: Cargo Worthy, акт подписан сторонами.`, actor: `Инспектор ${terminal}` },
       { type: "LEASE_ON_HIRE", occurredAt: new Date(onHire.getTime() + 11 * 3_600_000), locode, terminal, description: `On-Hire: передан в долгосрочную аренду ${lease.lessee} по договору ${lease.contractNumber}, Per Diem $${lease.dailyRate.toFixed(2)}.`, actor: ACTORS.manager },
     );
-    revenue += rentalDaysInRange({ onHireDate: onHire, offHireDate: offHire }, onHire, today) * lease.dailyRate;
     if (offHire) {
+      // Как в offHireAction: аренда попадает в выручку при Off-Hire. Для единиц на руках её начислит будущий Off-Hire.
+      revenue += rentalDaysInRange({ onHireDate: onHire, offHireDate: offHire }, onHire, offHire) * lease.dailyRate;
       events.push(
         { type: "LEASE_OFF_HIRE", occurredAt: new Date(offHire.getTime() + 13 * 3_600_000), locode, terminal, description: `Off-Hire: возвращен из аренды по договору ${lease.contractNumber}. Off-Hire Survey подписан, повреждений нет.`, actor: ACTORS.manager },
         { type: "GATE_IN", occurredAt: new Date(offHire.getTime() + 15 * 3_600_000), locode, terminal, description: "Gate-In на сток после возврата из аренды. Ожидает выдачи.", actor: ACTORS.edi },

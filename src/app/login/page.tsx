@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Anchor, ShieldCheck, Timer, TrendingUp } from "lucide-react";
 import { Brand } from "@/components/brand";
+import { DEMO_CREDENTIALS, isDemoMode } from "@/lib/demo-mode";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = { title: "Вход" };
@@ -53,8 +54,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <Brand className="mb-10 lg:hidden" />
           <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Вход в систему</h2>
           <p className="mt-1.5 text-sm text-slate-500">Используйте корпоративную учётную запись.</p>
-          <LoginForm next={next} />
-          <p className="mt-8 flex items-center gap-2 text-xs text-slate-400">
+          <LoginForm next={next} demo={isDemoMode() ? DEMO_CREDENTIALS : null} />
+          <p className="mt-8 flex items-center gap-2 text-xs text-slate-500">
             <ShieldCheck className="size-4" aria-hidden />
             Сессия защищена JWT в httpOnly-cookie, срок — 8 часов.
           </p>

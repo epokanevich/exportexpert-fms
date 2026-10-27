@@ -3,13 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth/dal";
 import { startOfDayUtc } from "@/lib/dates";
 import { CONDITION_GRADES, CONDITION_GRADE_LABELS, TECH_STATUSES, TECH_STATUS_LABELS, locodeCity } from "@/lib/domain/constants";
 import { formatBic } from "@/lib/iso6346";
 import { issueBlockReason } from "@/lib/domain/container";
 import { formatDate, formatUsd } from "@/lib/format";
-import { dateField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText } from "./helpers";
+import { authorize, dateField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText } from "./helpers";
 import type { ActionResult } from "./types";
 
 const inspectionSchema = z
@@ -36,7 +35,9 @@ export type InspectionInput = z.input<typeof inspectionSchema>;
  *  IN_REPAIR/DAMAGED → SOUND: ремонт закрыт, EOR списывается в затраты на ремонт, контейнер возвращается на сток.
  */
 export async function inspectContainerAction(containerId: string, input: InspectionInput): Promise<ActionResult> {
-  const session = await requireSession();
+  const auth = await authorize("inspection");
+  if (!auth.ok) return auth.result;
+  const { session } = auth;
   const parsed = parseInput(inspectionSchema, input);
   if (!parsed.ok) return parsed.result;
   const data = parsed.data;
@@ -86,7 +87,9 @@ const gateInSchema = z.object({ locode: locodeField, terminal: requiredText("т�
 
 /** Gate-In на терминал (прибытие из собственного рейса / перемещение между депо). */
 export async function gateInAction(containerId: string, input: z.input<typeof gateInSchema>): Promise<ActionResult> {
-  const session = await requireSession();
+  const auth = await authorize("inspection");
+  if (!auth.ok) return auth.result;
+  const { session } = auth;
   const parsed = parseInput(gateInSchema, input);
   if (!parsed.ok) return parsed.result;
   const c = await prisma.container.findUnique({ where: { id: containerId } });
@@ -115,7 +118,9 @@ const gateOutSchema = z.object({ destinationLocode: locodeField, note: optionalT
 
 /** Gate-Out в собственный рейс. */
 export async function gateOutAction(containerId: string, input: z.input<typeof gateOutSchema>): Promise<ActionResult> {
-  const session = await requireSession();
+  const auth = await authorize("inspection");
+  if (!auth.ok) return auth.result;
+  const { session } = auth;
   const parsed = parseInput(gateOutSchema, input);
   if (!parsed.ok) return parsed.result;
   const c = await prisma.container.findUnique({ where: { id: containerId } });
@@ -149,7 +154,9 @@ export async function gateOutAction(containerId: string, input: z.input<typeof g
 const cscSchema = z.object({ cscPlateExpiry: dateField });
 
 export async function renewCscAction(containerId: string, input: z.input<typeof cscSchema>): Promise<ActionResult> {
-  const session = await requireSession();
+  const auth = await authorize("inspection");
+  if (!auth.ok) return auth.result;
+  const { session } = auth;
   const parsed = parseInput(cscSchema, input);
   if (!parsed.ok) return parsed.result;
   const c = await prisma.container.findUnique({ where: { id: containerId } });

@@ -15,6 +15,8 @@ import { NAV_ITEMS, isActivePath, type NavBadges } from "./nav-items";
 
 interface AppShellProps {
   user: { name: string; email: string; role: string };
+  /** Сброс демо-данных: ADMIN и демо-режим не выключен через DEMO_MODE=false (решает сервер). */
+  canReset: boolean;
   badges: NavBadges;
   children: ReactNode;
 }
@@ -102,7 +104,7 @@ function ProfileActions({ onDone, compact = false, canReset }: { onDone?: () => 
   );
 }
 
-export function AppShell({ user, badges, children }: AppShellProps) {
+export function AppShell({ user, badges, canReset, children }: AppShellProps) {
   const pathname = usePathname();
   const [profileOpen, setProfileOpen] = useState(false);
   const current = NAV_ITEMS.find((i) => isActivePath(pathname, i.href));
@@ -145,7 +147,7 @@ export function AppShell({ user, badges, children }: AppShellProps) {
             </div>
           </div>
           <div className="[&_button]:w-full [&_button]:border-white/10 [&_button]:bg-transparent [&_button]:text-slate-300 [&_button:hover]:bg-white/10 [&_button:hover]:text-white">
-            <ProfileActions compact canReset={user.role === "ADMIN"} />
+            <ProfileActions compact canReset={canReset} />
           </div>
         </div>
       </aside>
@@ -160,9 +162,9 @@ export function AppShell({ user, badges, children }: AppShellProps) {
           type="button"
           onClick={() => setProfileOpen(true)}
           className="flex size-10 items-center justify-center rounded-full bg-indigo-50 text-sm font-semibold text-indigo-700 ring-1 ring-indigo-100"
-          aria-label="Профиль и настройки"
         >
-          {initials(user.name) || <UserRound className="size-5" />}
+          {initials(user.name) || <UserRound className="size-5" aria-hidden />}
+          <span className="sr-only"> профиль и настройки</span>
         </button>
       </header>
 
@@ -206,7 +208,7 @@ export function AppShell({ user, badges, children }: AppShellProps) {
       </nav>
 
       <Sheet open={profileOpen} onClose={() => setProfileOpen(false)} title={user.name} description={`${user.email} · ${ROLE_LABELS[user.role] ?? user.role}`}>
-        <ProfileActions onDone={() => setProfileOpen(false)} canReset={user.role === "ADMIN"} />
+        <ProfileActions onDone={() => setProfileOpen(false)} canReset={canReset} />
       </Sheet>
     </div>
   );

@@ -8,7 +8,7 @@ import { Field, Input, Textarea } from "@/components/ui/primitives";
 import { useServerAction } from "@/components/use-server-action";
 import { computeTripTiming } from "@/lib/domain/one-way";
 import { locodeCity, terminalsOf } from "@/lib/domain/constants";
-import { parseDateInput, toDateInput } from "@/lib/dates";
+import { parseDateInput, toLocalDateInput } from "@/lib/dates";
 import { formatDate, formatDays, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -25,7 +25,7 @@ export interface GateInTrip {
 
 /** Фиксация возврата по One-Way (Gate-In) с выбором состояния и предпросмотром детеншна. */
 export function GateInForm({ trip, onDone }: { trip: GateInTrip; onDone: () => void }) {
-  const [returnDate, setReturnDate] = useState(toDateInput(new Date()));
+  const [returnDate, setReturnDate] = useState(toLocalDateInput());
   const [terminal, setTerminal] = useState(trip.dropoffTerminal);
   const [condition, setCondition] = useState<"SOUND" | "DAMAGED">("SOUND");
   const [eorUsd, setEorUsd] = useState("");
@@ -53,7 +53,7 @@ export function GateInForm({ trip, onDone }: { trip: GateInTrip; onDone: () => v
 
       <div className="grid grid-cols-2 gap-3">
         <Field label="Дата Gate-In" htmlFor="gi-date" error={fieldErrors.returnDate}>
-          <Input id="gi-date" type="date" value={returnDate} max={toDateInput(new Date())} onChange={(e) => setReturnDate(e.target.value)} />
+          <Input id="gi-date" type="date" value={returnDate} max={toLocalDateInput()} onChange={(e) => setReturnDate(e.target.value)} />
         </Field>
         <Field label="Терминал приёмки" htmlFor="gi-terminal" error={fieldErrors.terminal}>
           <Input id="gi-terminal" list="gi-terminals" value={terminal} onChange={(e) => setTerminal(e.target.value)} />

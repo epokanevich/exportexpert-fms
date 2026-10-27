@@ -8,7 +8,7 @@ export const CSV_BOM = String.fromCharCode(0xfeff); // UTF-8 BOM, U+FEFF
 const DELIMITER = ";";
 const LINE_BREAK = "\r\n";
 /** Символы, с которых Excel начинает формулу — защита от CSV/формула-инъекций. */
-const FORMULA_PREFIX = /^[=+\-@\t\r]/;
+const FORMULA_PREFIX = /^[=+\-@\t\r\n＝＋－＠]/;
 const NEEDS_QUOTES = /[";\r\n]/;
 /** Телефон вида «+7 812 336-50-20»: только безопасные символы — можно отдать как текстовую константу Excel. */
 const PHONE_LIKE = /^\+[\d\s()-]+$/;

@@ -6,6 +6,8 @@ import { Badge, Card, CardContent, CardHeader, DataList, Progress } from "@/comp
 import { BicCode, CscBadge, GradeBadge, OperationalStatusBadge, TechStatusBadge, TripStatusBadge } from "@/components/status-badges";
 import { EventTimeline } from "@/components/containers/event-timeline";
 import { ContainerProfileActions } from "@/components/containers/container-profile-actions";
+import { requireSession } from "@/lib/auth/dal";
+import { can } from "@/lib/auth/permissions";
 import type { ContainerFormValues } from "@/components/containers/container-form";
 import { getContainerProfile } from "@/lib/queries/containers";
 import { attentionFlagsOf, unitEconomicsOf } from "@/lib/domain/container";
@@ -27,7 +29,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 
 export default async function ContainerProfilePage({ params }: { params: Params }) {
   const { id } = await params;
-  const c = await getContainerProfile(id);
+  const [session, c] = await Promise.all([requireSession(), getContainerProfile(id)]);
   if (!c) notFound();
 
   const now = new Date();
@@ -87,7 +89,7 @@ export default async function ContainerProfilePage({ params }: { params: Params 
               {flags.storage.isIdleTooLong && <Badge tone="violet">Простой {formatDays(flags.storage.idleDays ?? 0)}</Badge>}
             </div>
           </div>
-          <ContainerProfileActions containerId={c.id} bicLabel={formatBic(c.bicCode)} formValues={formValues} canDelete={!activeTrip && !activeLease && !hasOpenDispute} />
+          <ContainerProfileActions containerId={c.id} bicLabel={formatBic(c.bicCode)} formValues={formValues} canDelete={!activeTrip && !activeLease && !hasOpenDispute} canEdit={can(session.role, "fleet:edit")} canWriteOff={can(session.role, "fleet:delete")} />
         </div>
         {(activeTrip || activeLease) && (
           <div className="border-t border-slate-100 bg-indigo-50/50 px-5 py-3 pl-6 text-sm">
@@ -192,7 +194,7 @@ export default async function ContainerProfilePage({ params }: { params: Params 
                   <span>Окупаемость (выручка − ремонты)</span>
                   <span className="font-mono">{formatPercent(economics.paybackRatio)}</span>
                 </div>
-                <Progress value={economics.paybackRatio} tone={economics.paybackRatio >= 1 ? "emerald" : "indigo"} />
+                <Progress label="Окупаемость" value={economics.paybackRatio} tone={economics.paybackRatio >= 1 ? "emerald" : "indigo"} />
               </div>
               <DataList
                 items={[

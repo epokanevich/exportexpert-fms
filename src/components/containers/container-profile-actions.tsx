@@ -9,7 +9,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/sheet";
 import { useServerAction } from "@/components/use-server-action";
 import { EVENT_TYPES, EVENT_TYPE_LABELS } from "@/lib/domain/constants";
-import { toDateInput } from "@/lib/dates";
+import { toLocalDateInput } from "@/lib/dates";
 import { ContainerForm, type ContainerFormValues } from "./container-form";
 
 interface ContainerProfileActionsProps {
@@ -17,27 +17,38 @@ interface ContainerProfileActionsProps {
   bicLabel: string;
   formValues: ContainerFormValues;
   canDelete: boolean;
+  /** Права роли (сервер проверяет их повторно): правка и журнал — fleet:edit, списание — fleet:delete. */
+  canEdit: boolean;
+  canWriteOff: boolean;
 }
 
-export function ContainerProfileActions({ containerId, bicLabel, formValues, canDelete }: ContainerProfileActionsProps) {
+export function ContainerProfileActions({ containerId, bicLabel, formValues, canDelete, canEdit, canWriteOff }: ContainerProfileActionsProps) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
   const [eventOpen, setEventOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const deletion = useServerAction();
 
+  if (!canEdit && !canWriteOff) return null;
+
   return (
     <>
       <div className="grid grid-cols-3 gap-2 sm:flex">
-        <Button variant="outline" onClick={() => setEventOpen(true)}>
-          <Plus /> <span className="truncate">Событие</span>
-        </Button>
-        <Button variant="outline" onClick={() => setEditOpen(true)}>
-          <Pencil /> <span className="truncate">Изменить</span>
-        </Button>
+        {canEdit && (
+          <>
+            <Button variant="outline" onClick={() => setEventOpen(true)}>
+              <Plus /> <span className="truncate">Событие</span>
+            </Button>
+            <Button variant="outline" onClick={() => setEditOpen(true)}>
+              <Pencil /> <span className="truncate">Изменить</span>
+            </Button>
+          </>
+        )}
+        {canWriteOff && (
         <Button variant="ghost" className="text-rose-600 hover:bg-rose-50 hover:text-rose-700" onClick={() => setDeleteOpen(true)}>
           <Trash2 /> <span className="truncate">Списать</span>
         </Button>
+        )}
       </div>
 
       <Sheet open={editOpen} onClose={() => setEditOpen(false)} title={`Редактирование ${bicLabel}`} size="lg">
@@ -79,7 +90,7 @@ export function ContainerProfileActions({ containerId, bicLabel, formValues, can
 
 function EventForm({ containerId, onDone }: { containerId: string; onDone: () => void }) {
   const [type, setType] = useState<string>("INSPECTION");
-  const [occurredAt, setOccurredAt] = useState(toDateInput(new Date()));
+  const [occurredAt, setOccurredAt] = useState(toLocalDateInput());
   const [description, setDescription] = useState("");
   const [amountUsd, setAmountUsd] = useState("");
   const { run, isPending, fieldErrors } = useServerAction();

@@ -116,6 +116,7 @@ model OneWayTrip {
   updatedAt DateTime @updatedAt
 
   @@index([status])
+  @@index([containerId]) // FK: профиль контейнера и реестр выбирают рейсы по контейнеру (Supabase advisor: unindexed_foreign_keys)
 }
 
 model LeaseContract {

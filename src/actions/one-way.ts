@@ -3,14 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth/dal";
 import { computeDeadline, computeTripTiming } from "@/lib/domain/one-way";
 import { locodeCity } from "@/lib/domain/constants";
 import { issueBlockReason } from "@/lib/domain/container";
 import { formatBic } from "@/lib/iso6346";
 import { formatDate, formatUsd } from "@/lib/format";
-import { startOfDayUtc } from "@/lib/dates";
-import { dateField, innField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
+import { latestBusinessDate, startOfDayUtc } from "@/lib/dates";
+import { authorize, ConflictError, dateField, innField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
 import type { ActionResult } from "./types";
 
 const createTripSchema = z.object({
@@ -31,7 +30,9 @@ const createTripSchema = z.object({
 export type CreateTripInput = z.input<typeof createTripSchema>;
 
 export async function createOneWayAction(input: CreateTripInput): Promise<ActionResult> {
-  const session = await requireSession();
+  const auth = await authorize("operations:manage");
+  if (!auth.ok) return auth.result;
+  const { session } = auth;
   const parsed = parseInput(createTripSchema, input);
   if (!parsed.ok) return parsed.result;
   const data = parsed.data;
@@ -46,6 +47,12 @@ export async function createOneWayAction(input: CreateTripInput): Promise<Action
   const deadline = computeDeadline(data.handoverDate, data.freeDays);
   try {
     const trip = await prisma.$transaction(async (tx) => {
+      // Захват контейнера условием «ещё на стоке»: параллельная выдача того же контейнера получит count = 0.
+      const claimed = await tx.container.updateMany({
+        where: { id: container.id, operationalStatus: "AVAILABLE" },
+        data: { operationalStatus: "ONE_WAY", currentTerminal: `Выдан: ${data.counterpartyName}`, storageStartDate: null, totalRevenueUsd: { increment: data.feeUsd } },
+      });
+      if (claimed.count === 0) throw new ConflictError(`${formatBic(container.bicCode)} уже выдан или снят со стока — обновите страницу`);
       const created = await tx.oneWayTrip.create({
         data: {
           containerId: container.id,
@@ -66,24 +73,16 @@ export async function createOneWayAction(input: CreateTripInput): Promise<Action
           notes: data.notes,
         },
       });
-      await tx.container.update({
-        where: { id: container.id },
+      await tx.containerEvent.create({
         data: {
-          operationalStatus: "ONE_WAY",
-          currentTerminal: `Выдан: ${data.counterpartyName}`,
-          storageStartDate: null,
-          totalRevenueUsd: { increment: data.feeUsd },
-          events: {
-            create: {
-              type: "ONE_WAY_OUT",
-              occurredAt: new Date(),
-              locode: container.currentLocode,
-              terminal: container.currentTerminal,
-              description: `Gate-Out: выдан в One-Way ${data.bookingRef} контрагенту ${data.counterpartyName}. Возврат: ${locodeCity(data.dropoffLocode)}, ${data.dropoffTerminal} до ${formatDate(deadline)} (${data.freeDays} своб. дней), детеншн ${formatUsd(data.detentionRatePerDayUsd)}/сут.`,
-              amountUsd: data.feeUsd || null,
-              actor: session.name,
-            },
-          },
+          containerId: container.id,
+          type: "ONE_WAY_OUT",
+          occurredAt: new Date(),
+          locode: container.currentLocode,
+          terminal: container.currentTerminal,
+          description: `Gate-Out: выдан в One-Way ${data.bookingRef} контрагенту ${data.counterpartyName}. Возврат: ${locodeCity(data.dropoffLocode)}, ${data.dropoffTerminal} до ${formatDate(deadline)} (${data.freeDays} своб. дней), детеншн ${formatUsd(data.detentionRatePerDayUsd)}/сут.`,
+          amountUsd: data.feeUsd || null,
+          actor: session.name,
         },
       });
       return created;
@@ -111,7 +110,9 @@ export type TripReturnInput = z.input<typeof returnSchema>;
 
 /** Gate-In по One-Way: закрывает рейс, начисляет детеншн, ставит контейнер на сток депо назначения. */
 export async function registerOneWayReturnAction(tripId: string, input: TripReturnInput): Promise<ActionResult> {
-  const session = await requireSession();
+  const auth = await authorize("operations:manage");
+  if (!auth.ok) return auth.result;
+  const { session } = auth;
   const parsed = parseInput(returnSchema, input);
   if (!parsed.ok) return parsed.result;
   const data = parsed.data;
@@ -120,16 +121,17 @@ export async function registerOneWayReturnAction(tripId: string, input: TripRetu
   if (!trip) return notFound("Рейс One-Way");
   if (trip.status !== "ACTIVE") return { ok: false, error: "Возврат по этому рейсу уже зафиксирован" };
   if (data.returnDate < startOfDayUtc(trip.handoverDate)) return { ok: false, error: "Дата возврата раньше даты выдачи", fieldErrors: { returnDate: "Раньше даты выдачи" } };
-  if (data.returnDate > new Date()) return { ok: false, error: "Дата возврата не может быть в будущем", fieldErrors: { returnDate: "Дата в будущем" } };
+  if (data.returnDate > latestBusinessDate(new Date())) return { ok: false, error: "Дата возврата не может быть в будущем", fieldErrors: { returnDate: "Дата в будущем" } };
 
   const timing = computeTripTiming({ ...trip, status: "COMPLETED", actualReturnDate: data.returnDate }, new Date());
   const isDamaged = data.condition === "DAMAGED";
   const detentionNote = timing.overdueDays > 0 ? ` Просрочка ${timing.overdueDays} дн., начислен детеншн ${formatUsd(timing.detentionUsd)}.` : " Возврат в пределах свободных дней.";
 
   try {
-    await prisma.$transaction([
-      prisma.oneWayTrip.update({
-        where: { id: trip.id },
+    await prisma.$transaction(async (tx) => {
+      // Закрываем рейс условием status = ACTIVE: второй параллельный Gate-In получит count = 0 и не начислит детеншн повторно.
+      const closed = await tx.oneWayTrip.updateMany({
+        where: { id: trip.id, status: "ACTIVE" },
         data: {
           status: isDamaged ? "DISPUTE" : "COMPLETED",
           actualReturnDate: data.returnDate,
@@ -138,8 +140,9 @@ export async function registerOneWayReturnAction(tripId: string, input: TripRetu
           returnEorUsd: isDamaged ? data.eorUsd : null,
           notes: data.note ?? trip.notes,
         },
-      }),
-      prisma.container.update({
+      });
+      if (closed.count === 0) throw new ConflictError("Возврат по этому рейсу уже зафиксирован");
+      await tx.container.update({
         where: { id: trip.containerId },
         data: {
           operationalStatus: "AVAILABLE",
@@ -167,8 +170,8 @@ export async function registerOneWayReturnAction(tripId: string, input: TripRetu
             ],
           },
         },
-      }),
-    ]);
+      });
+    });
     revalidatePath("/", "layout");
     return {
       ok: true,
@@ -182,7 +185,9 @@ export async function registerOneWayReturnAction(tripId: string, input: TripRetu
 const resolveSchema = z.object({ compensationUsd: moneyField, note: optionalText(500) });
 
 export async function resolveDisputeAction(tripId: string, input: z.input<typeof resolveSchema>): Promise<ActionResult> {
-  const session = await requireSession();
+  const auth = await authorize("operations:manage");
+  if (!auth.ok) return auth.result;
+  const { session } = auth;
   const parsed = parseInput(resolveSchema, input);
   if (!parsed.ok) return parsed.result;
   const trip = await prisma.oneWayTrip.findUnique({ where: { id: tripId }, include: { container: { select: { bicCode: true, currentLocode: true, currentTerminal: true } } } });
@@ -190,26 +195,34 @@ export async function resolveDisputeAction(tripId: string, input: z.input<typeof
   if (trip.status !== "DISPUTE") return { ok: false, error: "По рейсу нет открытой претензии" };
 
   const { compensationUsd, note } = parsed.data;
-  await prisma.$transaction([
-    prisma.oneWayTrip.update({ where: { id: tripId }, data: { status: "COMPLETED", notes: [trip.notes, `Претензия закрыта: компенсация ${formatUsd(compensationUsd)}. ${note ?? ""}`].filter(Boolean).join("\n") } }),
-    prisma.container.update({
-      where: { id: trip.containerId },
-      data: {
-        totalRevenueUsd: { increment: compensationUsd },
-        events: {
-          create: {
-            type: "STATUS_CHANGE",
-            occurredAt: new Date(),
-            locode: trip.container.currentLocode,
-            terminal: trip.container.currentTerminal,
-            description: `Претензия по One-Way ${trip.bookingRef} урегулирована: компенсация ${formatUsd(compensationUsd)} от ${trip.counterpartyName}.${note ? ` ${note}` : ""}`,
-            amountUsd: compensationUsd || null,
-            actor: session.name,
+  try {
+    await prisma.$transaction(async (tx) => {
+      const closed = await tx.oneWayTrip.updateMany({
+        where: { id: tripId, status: "DISPUTE" },
+        data: { status: "COMPLETED", notes: [trip.notes, `Претензия закрыта: компенсация ${formatUsd(compensationUsd)}. ${note ?? ""}`].filter(Boolean).join("\n") },
+      });
+      if (closed.count === 0) throw new ConflictError("Претензия уже закрыта");
+      await tx.container.update({
+        where: { id: trip.containerId },
+        data: {
+          totalRevenueUsd: { increment: compensationUsd },
+          events: {
+            create: {
+              type: "STATUS_CHANGE",
+              occurredAt: new Date(),
+              locode: trip.container.currentLocode,
+              terminal: trip.container.currentTerminal,
+              description: `Претензия по One-Way ${trip.bookingRef} урегулирована: компенсация ${formatUsd(compensationUsd)} от ${trip.counterpartyName}.${note ? ` ${note}` : ""}`,
+              amountUsd: compensationUsd || null,
+              actor: session.name,
+            },
           },
         },
-      },
-    }),
-  ]);
+      });
+    });
+  } catch (error) {
+    return serverError("one-way", error);
+  }
   revalidatePath("/", "layout");
   return { ok: true, message: `Претензия по ${trip.bookingRef} закрыта` };
 }

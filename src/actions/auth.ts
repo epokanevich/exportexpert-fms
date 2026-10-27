@@ -31,9 +31,14 @@ function isRateLimited(key: string): boolean {
 
 function registerFailure(key: string): void {
   const now = Date.now();
+  // Не даём карте расти бесконечно при переборе случайных email.
+  for (const [k, v] of attempts) if (v.resetAt < now) attempts.delete(k);
   const entry = attempts.get(key);
   attempts.set(key, entry && entry.resetAt > now ? { ...entry, count: entry.count + 1 } : { count: 1, resetAt: now + WINDOW_MS });
 }
+
+/** bcrypt-хэш случайной строки (cost 10, как у пользователей) — для выравнивания времени ответа. */
+const DUMMY_HASH = "$2b$10$HLDPiLxOdhyn89tcGRN3x./4cRxAuZfFAu9CwC9gP2YiKeVji2F1C";
 
 const INTERNAL_ORIGIN = "http://fms.internal";
 
@@ -67,8 +72,15 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
     return { error: "Слишком много попыток входа. Повторите через 5 минут.", email };
   }
 
-  const user = await prisma.user.findUnique({ where: { email } });
-  const isValid = user ? await bcrypt.compare(password, user.passwordHash) : false;
+  let user;
+  try {
+    user = await prisma.user.findUnique({ where: { email } });
+  } catch (error) {
+    console.error("[action:auth]", error);
+    return { error: "Сервис временно недоступен. Повторите попытку через минуту.", email };
+  }
+  // Для несуществующего email тоже считаем bcrypt — время ответа не выдаёт, есть ли такая учётная запись.
+  const isValid = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
   if (!user || !isValid) {
     registerFailure(email);
     return { error: "Неверный email или пароль", email };

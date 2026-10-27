@@ -3,14 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth/dal";
-import { addMonths, startOfDayUtc } from "@/lib/dates";
+import { addMonths, latestBusinessDate, startOfDayUtc } from "@/lib/dates";
 import { PAYMENT_STATUSES, PAYMENT_STATUS_LABELS, locodeCity } from "@/lib/domain/constants";
 import { parseLocodeList, rentalDaysInRange } from "@/lib/domain/lease";
 import { issueBlockReason } from "@/lib/domain/container";
 import { formatBic } from "@/lib/iso6346";
 import { formatDate, formatUsd } from "@/lib/format";
-import { dateField, innField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
+import { authorize, ConflictError, dateField, innField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
 import type { ActionResult } from "./types";
 
 const createLeaseSchema = z
@@ -37,7 +36,9 @@ const createLeaseSchema = z
 export type CreateLeaseInput = z.input<typeof createLeaseSchema>;
 
 export async function createLeaseAction(input: CreateLeaseInput): Promise<ActionResult> {
-  const session = await requireSession();
+  const auth = await authorize("operations:manage");
+  if (!auth.ok) return auth.result;
+  const { session } = auth;
   const parsed = parseInput(createLeaseSchema, input);
   if (!parsed.ok) return parsed.result;
   const data = parsed.data;
@@ -82,12 +83,15 @@ export async function createLeaseAction(input: CreateLeaseInput): Promise<Action
         },
       });
       for (const c of containers) {
+        // Захват условием «ещё на стоке»: контейнер, параллельно выданный в другой договор/рейс, откатит всю транзакцию.
+        const claimed = await tx.container.updateMany({
+          where: { id: c.id, operationalStatus: "AVAILABLE" },
+          data: { operationalStatus: "LONG_TERM_LEASE", currentTerminal: `В аренде: ${data.lesseeName}`, storageStartDate: null },
+        });
+        if (claimed.count === 0) throw new ConflictError(`${formatBic(c.bicCode)} уже выдан или снят со стока — обновите страницу`);
         await tx.container.update({
           where: { id: c.id },
           data: {
-            operationalStatus: "LONG_TERM_LEASE",
-            currentTerminal: `В аренде: ${data.lesseeName}`,
-            storageStartDate: null,
             events: {
               create: {
                 type: "LEASE_ON_HIRE",
@@ -116,7 +120,9 @@ const extendSchema = z.object({
 });
 
 export async function extendLeaseAction(leaseId: string, input: z.input<typeof extendSchema>): Promise<ActionResult> {
-  const session = await requireSession();
+  const auth = await authorize("operations:manage");
+  if (!auth.ok) return auth.result;
+  const { session } = auth;
   const parsed = parseInput(extendSchema, input);
   if (!parsed.ok) return parsed.result;
   const lease = await prisma.leaseContract.findUnique({ where: { id: leaseId }, include: { items: { where: { offHireDate: null }, include: { container: true } } } });
@@ -124,12 +130,20 @@ export async function extendLeaseAction(leaseId: string, input: z.input<typeof e
   if (lease.status !== "ACTIVE") return { ok: false, error: "Договор уже закрыт" };
 
   const { months, newDailyRateUsd } = parsed.data;
+  // Ставка хранится одна на договор: смена Per Diem пересчитала бы задним числом уже начисленные дни
+  // (Off-Hire, «Начислено за срок», CSV). Новая ставка оформляется новым договором.
+  if (newDailyRateUsd !== null && newDailyRateUsd !== lease.dailyRateUsd) {
+    return {
+      ok: false,
+      error: "Изменение ставки при продлении не поддерживается: оформите новый договор с новой ставкой",
+      fieldErrors: { newDailyRateUsd: "Ставка меняется новым договором" },
+    };
+  }
   const newEnd = addMonths(lease.endDate, months);
-  const rateNote = newDailyRateUsd && newDailyRateUsd !== lease.dailyRateUsd ? `, новая ставка ${formatUsd(newDailyRateUsd, 2)}/сут.` : "";
   await prisma.$transaction([
     prisma.leaseContract.update({
       where: { id: leaseId },
-      data: { endDate: newEnd, dailyRateUsd: newDailyRateUsd ?? lease.dailyRateUsd, offHireSurvey: "NOT_STARTED" },
+      data: { endDate: newEnd, offHireSurvey: "NOT_STARTED" },
     }),
     prisma.containerEvent.createMany({
       data: lease.items.map((item) => ({
@@ -138,7 +152,7 @@ export async function extendLeaseAction(leaseId: string, input: z.input<typeof e
         occurredAt: new Date(),
         locode: item.container.currentLocode,
         terminal: item.container.currentTerminal,
-        description: `Договор ${lease.contractNumber} продлён на ${months} мес. до ${formatDate(newEnd)}${rateNote}.`,
+        description: `Договор ${lease.contractNumber} продлён на ${months} мес. до ${formatDate(newEnd)}.`,
         actor: session.name,
       })),
     }),
@@ -163,7 +177,9 @@ const offHireSchema = z
 export type OffHireInput = z.input<typeof offHireSchema>;
 
 export async function offHireAction(leaseId: string, input: OffHireInput): Promise<ActionResult> {
-  const session = await requireSession();
+  const auth = await authorize("operations:manage");
+  if (!auth.ok) return auth.result;
+  const { session } = auth;
   const parsed = parseInput(offHireSchema, input);
   if (!parsed.ok) return parsed.result;
   const data = parsed.data;
@@ -176,7 +192,7 @@ export async function offHireAction(leaseId: string, input: OffHireInput): Promi
   const items = lease.items.filter((i) => data.itemIds.includes(i.id) && !i.offHireDate);
   if (items.length !== data.itemIds.length) return { ok: false, error: "Часть контейнеров уже возвращена или не относится к договору" };
   if (items.some((i) => data.returnDate < startOfDayUtc(i.onHireDate))) return { ok: false, error: "Дата возврата раньше даты On-Hire", fieldErrors: { returnDate: "Раньше On-Hire" } };
-  if (data.returnDate > new Date()) return { ok: false, error: "Дата возврата не может быть в будущем", fieldErrors: { returnDate: "Дата в будущем" } };
+  if (data.returnDate > latestBusinessDate(new Date())) return { ok: false, error: "Дата возврата не может быть в будущем", fieldErrors: { returnDate: "Дата в будущем" } };
 
   const remaining = lease.items.filter((i) => !i.offHireDate).length - items.length;
   const isDamaged = data.condition === "DAMAGED";
@@ -186,7 +202,9 @@ export async function offHireAction(leaseId: string, input: OffHireInput): Promi
       for (const item of items) {
         const rentalDays = rentalDaysInRange({ onHireDate: item.onHireDate, offHireDate: data.returnDate }, item.onHireDate, data.returnDate);
         const earned = rentalDays * lease.dailyRateUsd;
-        await tx.leaseItem.update({ where: { id: item.id }, data: { offHireDate: data.returnDate, returnLocode: data.returnLocode } });
+        // Условие offHireDate = null: единица, уже возвращённая параллельным запросом, не принесёт выручку повторно.
+        const returned = await tx.leaseItem.updateMany({ where: { id: item.id, offHireDate: null }, data: { offHireDate: data.returnDate, returnLocode: data.returnLocode } });
+        if (returned.count === 0) throw new ConflictError("Часть контейнеров уже возвращена — обновите страницу");
         await tx.container.update({
           where: { id: item.containerId },
           data: {
@@ -227,7 +245,8 @@ export async function offHireAction(leaseId: string, input: OffHireInput): Promi
 const paymentSchema = z.object({ paymentStatus: z.enum(PAYMENT_STATUSES) });
 
 export async function updatePaymentStatusAction(leaseId: string, input: z.input<typeof paymentSchema>): Promise<ActionResult> {
-  await requireSession();
+  const auth = await authorize("operations:manage");
+  if (!auth.ok) return auth.result;
   const parsed = parseInput(paymentSchema, input);
   if (!parsed.ok) return parsed.result;
   const lease = await prisma.leaseContract.findUnique({ where: { id: leaseId }, select: { id: true, contractNumber: true } });

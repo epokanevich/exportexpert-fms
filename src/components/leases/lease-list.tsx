@@ -89,12 +89,12 @@ export function LeaseList({ leases, issuable }: { leases: LeaseRow[]; issuable: 
         </div>
         <div className="flex gap-2">
           <div className="relative flex-1 2xl:w-72">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" aria-hidden />
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" aria-hidden />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Договор или арендатор" className="pl-9" aria-label="Поиск договора" />
           </div>
           <ExportCsvButton rows={visible} columns={LEASE_CSV_COLUMNS} filePrefix={`fms-leases-${tab}`} />
           <Button className="h-11 lg:h-10" onClick={() => setNewOpen(true)}>
-            <Plus /> <span className="hidden sm:inline">Новый договор</span>
+            <Plus /> <span className="sr-only sm:not-sr-only">Новый договор</span>
           </Button>
         </div>
       </div>
@@ -133,7 +133,7 @@ export function LeaseList({ leases, issuable }: { leases: LeaseRow[]; issuable: 
                       <p className="font-mono text-xs text-slate-600">{formatDate(l.startDate)} — {formatDate(l.endDate)}</p>
                       <div className="mt-1"><LeaseExpiryBadge level={l.metrics.expiryLevel} daysToEnd={l.metrics.daysToEnd} /></div>
                     </td>
-                    <td className="px-3 py-3 text-right font-mono">{l.metrics.activeUnits}<span className="text-slate-400">/{l.metrics.totalUnits}</span></td>
+                    <td className="px-3 py-3 text-right font-mono">{l.metrics.activeUnits}<span className="text-slate-500">/{l.metrics.totalUnits}</span></td>
                     <td className="px-3 py-3 text-right font-mono">{formatUsd(l.dailyRateUsd, 2)}</td>
                     <td className="px-3 py-3 text-right font-mono">{formatUsd(Math.round(l.metrics.accruedThisMonthUsd))}</td>
                     <td className="px-3 py-3 text-right font-mono font-semibold">{formatUsd(Math.round(l.metrics.accruedTotalUsd))}</td>
@@ -187,7 +187,7 @@ function Tile({ label, value, sub, accent = false }: { label: string; value: str
     <div className={cn("rounded-xl border p-3 shadow-sm sm:p-4", accent ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white")}>
       <p className="text-xs text-slate-500">{label}</p>
       <p className={cn("mt-1 font-mono text-xl font-semibold tabular sm:text-2xl", accent ? "text-emerald-700" : "text-slate-900")}>{value}</p>
-      <p className="mt-0.5 text-[11px] text-slate-400">{sub}</p>
+      <p className="mt-0.5 text-[11px] text-slate-500">{sub}</p>
     </div>
   );
 }

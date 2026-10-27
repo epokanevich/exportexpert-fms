@@ -142,7 +142,7 @@ export function ContainerRegistry({ rows, initialFilters }: ContainerRegistryPro
       <div className="sticky top-14 z-20 -mx-4 mb-4 space-y-3 bg-slate-50/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" aria-hidden />
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" aria-hidden />
             <Input
               value={filters.q}
               onChange={(e) => update("q", e.target.value)}
@@ -152,7 +152,7 @@ export function ContainerRegistry({ rows, initialFilters }: ContainerRegistryPro
               inputMode="search"
             />
             {filters.q && (
-              <button type="button" onClick={() => update("q", "")} className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-700" aria-label="Очистить поиск">
+              <button type="button" onClick={() => update("q", "")} className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-1 text-slate-500 hover:text-slate-700" aria-label="Очистить поиск">
                 <X className="size-4" />
               </button>
             )}
@@ -163,7 +163,7 @@ export function ContainerRegistry({ rows, initialFilters }: ContainerRegistryPro
           </Button>
           <Button className="h-11 lg:h-10" onClick={() => setCreateOpen(true)}>
             <Plus />
-            <span className="hidden sm:inline">Добавить</span>
+            <span className="sr-only sm:not-sr-only">Добавить</span>
           </Button>
         </div>
         <div className="hidden gap-2 lg:grid lg:grid-cols-3 xl:grid-cols-5">{filterControls}</div>
@@ -223,11 +223,11 @@ export function ContainerRegistry({ rows, initialFilters }: ContainerRegistryPro
                     >
                       <td className="px-3 py-3">
                         <BicCode code={row.bicCode} />
-                        <p className="text-xs text-slate-400">{row.manufactureYear} · {row.manufacturer.split(" ")[0]}</p>
+                        <p className="text-xs text-slate-500">{row.manufactureYear} · {row.manufacturer.split(" ")[0]}</p>
                       </td>
                       <td className="px-3 py-3">
                         <span className="font-mono font-medium">{row.sizeType}</span>
-                        <p className="font-mono text-xs text-slate-400">{row.isoCode}</p>
+                        <p className="font-mono text-xs text-slate-500">{row.isoCode}</p>
                       </td>
                       <td className="px-3 py-3">
                         <OperationalStatusBadge status={row.operationalStatus} />
@@ -282,7 +282,7 @@ export function ContainerRegistry({ rows, initialFilters }: ContainerRegistryPro
                     {row.techStatus !== "SOUND" && <TechStatusBadge status={row.techStatus} />}
                   </div>
                   <p className="mt-2.5 flex items-center gap-1.5 text-sm text-slate-600">
-                    <MapPin className="size-3.5 shrink-0 text-slate-400" />
+                    <MapPin className="size-3.5 shrink-0 text-slate-500" />
                     <span className="truncate">{locodeCity(row.currentLocode)} · {row.currentTerminal}</span>
                   </p>
                   {row.activity && <p className="mt-1 truncate text-xs text-slate-500">{row.activity}</p>}
@@ -373,7 +373,7 @@ function QuickView({ row }: { row: ContainerRow }) {
         ]}
       />
       <div>
-        <h3 className="mb-3 text-xs font-semibold tracking-wide text-slate-400 uppercase">Последние события</h3>
+        <h3 className="mb-3 text-xs font-semibold tracking-wide text-slate-500 uppercase">Последние события</h3>
         <EventTimeline events={row.recentEvents} compact />
       </div>
     </div>

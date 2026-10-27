@@ -69,7 +69,7 @@ export default async function DashboardPage() {
         </Card>
 
         <KpiCard href="/containers" icon={<Gauge />} label="Утилизация парка" value={formatPercent(kpi.utilizationRate, 1)} tone="indigo">
-          <Progress value={kpi.utilizationRate} className="mt-2" />
+          <Progress label="Утилизация парка" value={kpi.utilizationRate} className="mt-2" />
           <p className="mt-2">{kpi.utilizedUnits} из {kpi.totalUnits} задействованы</p>
         </KpiCard>
 
@@ -192,8 +192,8 @@ export default async function DashboardPage() {
         <EconomicsTile label="Накопленная выручка" value={formatUsd(Math.round(economics.revenue))} />
         <EconomicsTile label="Остаточная стоимость парка" value={formatUsd(economics.book)} />
         <EconomicsTile label="Затраты на ремонты" value={formatUsd(economics.repairs)} />
-        <EconomicsTile label="Ремонты к согласованию (EOR)" value={formatUsd(economics.eorPending)} accent="text-orange-600" />
-        <EconomicsTile label="Хранение порожних, $/сутки" value={formatUsd(economics.storagePerDay, 2)} accent="text-violet-600" icon={<Warehouse className="size-4" />} />
+        <EconomicsTile label="Ремонты к согласованию (EOR)" value={formatUsd(economics.eorPending)} accent="text-orange-700" />
+        <EconomicsTile label="Хранение порожних, $/сутки" value={formatUsd(economics.storagePerDay, 2)} accent="text-violet-700" icon={<Warehouse className="size-4" />} />
       </section>
     </>
   );

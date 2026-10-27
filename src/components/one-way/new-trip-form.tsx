@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { useServerAction } from "@/components/use-server-action";
 import { LOCATIONS, locodeCity, terminalsOf } from "@/lib/domain/constants";
-import { addDays, parseDateInput, toDateInput } from "@/lib/dates";
+import { addDays, parseDateInput, toLocalDateInput } from "@/lib/dates";
 import { formatBic } from "@/lib/iso6346";
 import { formatDate } from "@/lib/format";
 import type { IssuableContainer } from "@/lib/queries/containers";
@@ -23,7 +23,7 @@ export function NewTripForm({ containers, onDone, presetContainerId }: { contain
     bookingRef: `OW-${new Date().getUTCFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`,
     dropoffLocode: "RUMOW",
     dropoffTerminal: "ТЛЦ Ворсино",
-    handoverDate: toDateInput(new Date()),
+    handoverDate: toLocalDateInput(),
     freeDays: "30",
     feeUsd: "0",
     detentionRatePerDayUsd: "15",

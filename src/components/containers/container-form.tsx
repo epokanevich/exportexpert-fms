@@ -22,7 +22,7 @@ import {
   terminalsOf,
 } from "@/lib/domain/constants";
 import { formatBic, validateBic } from "@/lib/iso6346";
-import { addDays, toDateInput } from "@/lib/dates";
+import { addDays, toLocalDateInput } from "@/lib/dates";
 import { formatNumber } from "@/lib/format";
 
 export interface ContainerFormValues {
@@ -61,13 +61,13 @@ export function emptyContainerForm(): ContainerFormValues {
     maxGrossWeightKg: String(DEFAULT_WEIGHTS["40HC"].gross),
     conditionGrade: "IICL6",
     techStatus: "SOUND",
-    cscPlateExpiry: toDateInput(addDays(today, 365 * 5)),
+    cscPlateExpiry: toLocalDateInput(addDays(today, 365 * 5)),
     eorAmountUsd: "",
     operationalStatus: "AVAILABLE",
     currentLocode: "CNSHA",
     currentTerminal: "Shanghai SIPG",
     storageRatePerDayUsd: "2",
-    purchaseDate: toDateInput(today),
+    purchaseDate: toLocalDateInput(today),
     purchasePriceUsd: "4350",
     currentBookValueUsd: "4350",
     notes: "",

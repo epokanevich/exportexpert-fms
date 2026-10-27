@@ -72,7 +72,7 @@ export function StatusChart({ data, total }: StatusChartProps) {
               <span className="size-2.5 rounded-sm" style={{ background: STATUS_COLORS[d.status] }} aria-hidden />
               <span className="flex-1 text-slate-600">{OPERATIONAL_STATUS_LABELS[d.status]}</span>
               <span className="font-mono font-medium text-slate-900 tabular">{d.units}</span>
-              <span className="w-10 text-right font-mono text-xs text-slate-400 tabular">{total ? Math.round((d.units / total) * 100) : 0}%</span>
+              <span className="w-10 text-right font-mono text-xs text-slate-500 tabular">{total ? Math.round((d.units / total) * 100) : 0}%</span>
             </Link>
           </li>
         ))}

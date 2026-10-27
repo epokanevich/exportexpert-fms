@@ -8,8 +8,8 @@ const VARIANTS = {
   outline: "border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50",
   ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
   destructive: "bg-rose-600 text-white shadow-sm hover:bg-rose-700",
-  success: "bg-emerald-600 text-white shadow-sm hover:bg-emerald-700",
-  warning: "bg-amber-500 text-white shadow-sm hover:bg-amber-600",
+  success: "bg-emerald-700 text-white shadow-sm hover:bg-emerald-800",
+  warning: "bg-amber-400 text-slate-950 shadow-sm hover:bg-amber-500",
 } as const;
 
 const SIZES = {

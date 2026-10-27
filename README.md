@@ -27,13 +27,13 @@
 
 ```bash
 npm install
-cp .env.example .env      # укажите DATABASE_URL (PostgreSQL) и AUTH_SECRET (≥ 32 символов)
+cp .env.example .env      # укажите DATABASE_URL (PostgreSQL), AUTH_SECRET (≥ 32 символов); для боевого стенда — DEMO_MODE=false
 npm run setup             # prisma db push + prisma db seed: схема и демо-данные
 npm run dev               # http://localhost:3000
 ```
 
-Вход: `admin@exportexpert.ru` / `Export2026!` — форма предзаполнена, есть кнопка
-**«Быстрый демо-вход в 1 клик»**. Кнопка **«Сбросить демо-данные к исходным»** — в профиле
+Вход: `admin@exportexpert.ru` / `Export2026!` (роль ADMIN) или `inspector@exportexpert.ru` / `Export2026!` (роль INSPECTOR).
+Демо-режим включён по умолчанию: форма предзаполнена и есть кнопка **«Быстрый демо-вход в 1 клик»**. Кнопка **«Сбросить демо-данные к исходным»** — в профиле
 (сайдбар на ПК, аватар в шапке на телефоне).
 
 | Команда | Что делает |
@@ -48,7 +48,8 @@ npm run dev               # http://localhost:3000
 
 ## Что показать проверяющему (демо-сценарии)
 
-Все даты в демо-данных считаются от текущего дня, поэтому сценарии актуальны при любом запуске.
+Все даты в демо-данных считаются от дня загрузки сида: сразу после загрузки (или «Сбросить демо-данные») сценарии
+совпадают с описанием ниже, со временем «горящие» рейсы становятся просроченными, а сроки договоров сдвигаются.
 
 - **Дашборд** — 31 контейнер / 50 TEU, утилизация, горящие и просроченные One-Way, доход аренды $/мес,
   алерты (КБК, ремонт, простой), распределение по регионам и статусам.
@@ -113,6 +114,8 @@ npm run dev               # http://localhost:3000
    - `DATABASE_URL` — строка Neon вида `postgresql://user:password@host/dbname?sslmode=require`;
    - `AUTH_SECRET` — случайная строка ≥ 32 символов
      (`node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`).
+   - `DEMO_MODE` — не задавайте для демо-стенда: по умолчанию включены быстрый вход, предзаполненный пароль,
+     гид для проверяющего и кнопка «Сбросить демо-данные». Для боевого стенда задайте `DEMO_MODE=false`.
 5. Deploy. Скрипт `vercel-build` (название историческое — он не зависит от платформы) выполняет
    `prisma generate → prisma db push → prisma/bootstrap.ts → next build`:
    схема применяется автоматически, демо-данные загружаются **только в пустую базу**, повторные деплои
@@ -131,6 +134,8 @@ npm run dev               # http://localhost:3000
    - `DATABASE_URL` — строка Neon вида `postgresql://user:password@host/dbname?sslmode=require`;
    - `AUTH_SECRET` — случайная строка ≥ 32 символов
      (`node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`).
+   - `DEMO_MODE` — не задавайте для демо-стенда: по умолчанию включены быстрый вход, предзаполненный пароль,
+     гид для проверяющего и кнопка «Сбросить демо-данные». Для боевого стенда задайте `DEMO_MODE=false`.
 4. Deploy. Vercel вызывает скрипт `vercel-build`:
    `prisma generate → prisma db push → prisma/bootstrap.ts → next build`.
    Схема применяется автоматически; демо-данные загружаются **только в пустую базу**, повторные деплои

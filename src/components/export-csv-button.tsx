@@ -26,7 +26,7 @@ export function ExportCsvButton<T>({ rows, columns, filePrefix, className }: Exp
   }
 
   return (
-    <Button variant="outline" className={cn("h-11 lg:h-10", className)} onClick={handleExport} title="Скачать текущую выборку в CSV (Excel)">
+    <Button variant="outline" className={cn("h-11 lg:h-10", className)} onClick={handleExport} title="Скачать текущую выборку в CSV (Excel)" aria-label="Выгрузить в Excel (CSV)">
       <FileSpreadsheet className="text-emerald-600" />
       <span className="hidden sm:inline">Excel / CSV</span>
     </Button>

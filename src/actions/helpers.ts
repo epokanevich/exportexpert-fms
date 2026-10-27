@@ -1,9 +1,30 @@
 import "server-only";
 import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { requireSession } from "@/lib/auth/dal";
+import type { SessionPayload } from "@/lib/auth/session";
+import { can, type Permission } from "@/lib/auth/permissions";
 import { parseDateInput } from "@/lib/dates";
 import type { ActionResult } from "./types";
 
 export type Parsed<T> = { ok: true; data: T } | { ok: false; result: ActionResult };
+
+export type Authorized = { ok: true; session: SessionPayload } | { ok: false; result: ActionResult };
+
+/**
+ * Сессия + право на действие. Роль читается из БД, а не из JWT: понижение роли или удаление
+ * пользователя действует сразу, не дожидаясь истечения 8-часового токена.
+ */
+export async function authorize(permission: Permission): Promise<Authorized> {
+  const session = await requireSession();
+  const user = await prisma.user.findUnique({ where: { id: session.userId }, select: { role: true, name: true } });
+  if (!user) return { ok: false, result: { ok: false, error: "Учётная запись не найдена — войдите заново" } };
+  if (!can(user.role, permission)) return { ok: false, result: { ok: false, error: "Недостаточно прав для этого действия" } };
+  return { ok: true, session: { ...session, role: user.role, name: user.name } };
+}
+
+/** Состояние записи изменил параллельный запрос (двойной клик, второй сотрудник) — операция не выполнена. */
+export class ConflictError extends Error {}
 
 export function parseInput<S extends z.ZodType>(schema: S, input: unknown): Parsed<z.infer<S>> {
   const parsed = schema.safeParse(input);
@@ -52,6 +73,7 @@ export const innField = z
  * Нарушение уникальности (гонка двух одновременных запросов) переводится в понятное сообщение.
  */
 export function serverError(context: string, error: unknown): ActionResult {
+  if (error instanceof ConflictError) return { ok: false, error: error.message };
   const code = typeof error === "object" && error !== null && "code" in error ? String((error as { code: unknown }).code) : null;
   if (code === "P2002") return { ok: false, error: "Запись с таким номером уже существует" };
   console.error(`[action:${context}]`, error);

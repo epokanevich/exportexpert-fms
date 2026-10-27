@@ -22,6 +22,12 @@ describe("CSV for Russian Excel", () => {
     expect(csv.slice(1)).toBe("Номер;Сумма, $;Дата;Флаг\r\nEXEX 402918-4;105;;Да");
   });
 
+  test("neutralises formula triggers incl. leading newline and full-width signs", () => {
+    expect(formatCsvCell("\n=HYPERLINK(1)")).toBe(`"'\n=HYPERLINK(1)"`);
+    expect(formatCsvCell("＝1+1")).toBe("'＝1+1");
+    expect(formatCsvCell("＋7")).toBe("'＋7");
+  });
+
   test("formats decimals with a comma and dates as dd.mm.yyyy", () => {
     expect(formatCsvCell(2.5)).toBe("2,50");
     expect(formatCsvCell(1329.9)).toBe("1329,90");

@@ -13,10 +13,30 @@ export function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * DAY_MS);
 }
 
+/** +N месяцев; 31.01 + 1 мес. = 28.02 (29.02), а не 03.03 — день ограничивается длиной целевого месяца. */
 export function addMonths(date: Date, months: number): Date {
-  const result = new Date(date.getTime());
-  result.setUTCMonth(result.getUTCMonth() + months);
-  return result;
+  const target = new Date(date.getTime());
+  target.setUTCDate(1);
+  target.setUTCMonth(target.getUTCMonth() + months);
+  target.setUTCDate(Math.min(date.getUTCDate(), daysInMonthUtc(target)));
+  return target;
+}
+
+/** Восточный край работы компании — Владивосток (UTC+10). */
+const EASTERNMOST_UTC_OFFSET_HOURS = 10;
+
+/**
+ * Последняя календарная дата, которая уже наступила хотя бы у одного пользователя.
+ * Сервер работает в UTC: без этого во Владивостоке до 10:00 «сегодня» отклонялось бы как дата в будущем.
+ */
+export function latestBusinessDate(now: Date): Date {
+  return startOfDayUtc(new Date(now.getTime() + EASTERNMOST_UTC_OFFSET_HOURS * 3_600_000));
+}
+
+/** Сегодняшняя дата по часам пользователя → "2026-10-27" для <input type="date"> (только клиентский код). */
+export function toLocalDateInput(date: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 /** Количество полных суток от `from` до `to` (отрицательное, если `to` раньше). */

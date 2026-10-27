@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth/dal";
 import { validateBic, formatBic } from "@/lib/iso6346";
 import { startOfDayUtc } from "@/lib/dates";
 import {
@@ -15,7 +14,7 @@ import {
   OPERATIONAL_STATUS_LABELS,
   TECH_STATUS_LABELS,
 } from "@/lib/domain/constants";
-import { dateField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
+import { authorize, dateField, locodeField, moneyField, notFound, optionalText, parseInput, requiredText, serverError } from "./helpers";
 import type { ActionResult } from "./types";
 
 const baseContainerSchema = z.object({
@@ -58,7 +57,9 @@ export type ContainerInput = z.input<typeof baseContainerSchema>;
 const MANAGED_STATUSES = new Set(["ONE_WAY", "LONG_TERM_LEASE"]);
 
 export async function createContainerAction(input: ContainerInput): Promise<ActionResult> {
-  const session = await requireSession();
+  const auth = await authorize("fleet:edit");
+  if (!auth.ok) return auth.result;
+  const { session } = auth;
   const parsed = parseInput(containerSchema, input);
   if (!parsed.ok) return parsed.result;
   const data = parsed.data;
@@ -101,7 +102,9 @@ export async function createContainerAction(input: ContainerInput): Promise<Acti
 }
 
 export async function updateContainerAction(id: string, input: ContainerInput): Promise<ActionResult> {
-  const session = await requireSession();
+  const auth = await authorize("fleet:edit");
+  if (!auth.ok) return auth.result;
+  const { session } = auth;
   const parsed = parseInput(containerSchema, input);
   if (!parsed.ok) return parsed.result;
   const data = parsed.data;
@@ -161,7 +164,8 @@ export async function updateContainerAction(id: string, input: ContainerInput): 
 }
 
 export async function deleteContainerAction(id: string): Promise<ActionResult> {
-  await requireSession();
+  const auth = await authorize("fleet:delete");
+  if (!auth.ok) return auth.result;
   const container = await prisma.container.findUnique({ where: { id }, select: { bicCode: true, operationalStatus: true } });
   if (!container) return notFound("Контейнер");
   if (MANAGED_STATUSES.has(container.operationalStatus)) {
@@ -184,7 +188,9 @@ const eventSchema = z.object({
 });
 
 export async function addContainerEventAction(containerId: string, input: z.input<typeof eventSchema>): Promise<ActionResult> {
-  const session = await requireSession();
+  const auth = await authorize("fleet:edit");
+  if (!auth.ok) return auth.result;
+  const { session } = auth;
   const parsed = parseInput(eventSchema, input);
   if (!parsed.ok) return parsed.result;
   const container = await prisma.container.findUnique({ where: { id: containerId }, select: { currentLocode: true, currentTerminal: true } });

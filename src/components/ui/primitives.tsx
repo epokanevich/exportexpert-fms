@@ -22,7 +22,7 @@ export function CardHeader({ title, description, icon, action, className }: Card
       <div className="flex min-w-0 items-start gap-2.5">
         {icon && <span className="mt-0.5 text-slate-400 [&_svg]:size-4">{icon}</span>}
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+          <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
           {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
         </div>
       </div>
@@ -125,15 +125,17 @@ export function Field({ label, htmlFor, hint, error, className, children }: Fiel
 interface ProgressProps {
   value: number;
   tone?: "indigo" | "emerald" | "amber" | "rose";
+  /** Доступное имя для скринридера (что измеряет шкала). */
+  label: string;
   className?: string;
 }
 
 const PROGRESS_TONES = { indigo: "bg-indigo-500", emerald: "bg-emerald-500", amber: "bg-amber-500", rose: "bg-rose-500" };
 
-export function Progress({ value, tone = "indigo", className }: ProgressProps) {
+export function Progress({ value, tone = "indigo", label, className }: ProgressProps) {
   const pct = Math.max(0, Math.min(100, value * 100));
   return (
-    <div className={cn("h-1.5 w-full overflow-hidden rounded-full bg-slate-100", className)} role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
+    <div className={cn("h-1.5 w-full overflow-hidden rounded-full bg-slate-100", className)} role="progressbar" aria-label={label} aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
       <div className={cn("h-full rounded-full transition-all", PROGRESS_TONES[tone])} style={{ width: `${pct}%` }} />
     </div>
   );

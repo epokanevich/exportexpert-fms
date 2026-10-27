@@ -8,7 +8,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { BicCode } from "@/components/status-badges";
 import { useServerAction } from "@/components/use-server-action";
 import { LOCATIONS, PAYMENT_STATUSES, PAYMENT_STATUS_LABELS, locodeCity, terminalsOf } from "@/lib/domain/constants";
-import { addMonths, parseDateInput, toDateInput } from "@/lib/dates";
+import { addMonths, parseDateInput, toDateInput, toLocalDateInput } from "@/lib/dates";
 import { formatBic } from "@/lib/iso6346";
 import { formatDate, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -164,7 +164,6 @@ export function NewLeaseForm({ containers, onDone }: { containers: IssuableConta
 
 export function ExtendLeaseForm({ lease, onDone }: { lease: LeaseRow; onDone: () => void }) {
   const [months, setMonths] = useState("3");
-  const [rate, setRate] = useState(String(lease.dailyRateUsd));
   const { run, isPending, fieldErrors } = useServerAction();
   const newEnd = Number(months) > 0 ? addMonths(new Date(lease.endDate), Number(months)) : null;
 
@@ -173,7 +172,7 @@ export function ExtendLeaseForm({ lease, onDone }: { lease: LeaseRow; onDone: ()
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => extendLeaseAction(lease.id, { months, newDailyRateUsd: rate }), onDone);
+        run(() => extendLeaseAction(lease.id, { months }), onDone);
       }}
     >
       <p className="text-sm text-slate-600">
@@ -190,9 +189,9 @@ export function ExtendLeaseForm({ lease, onDone }: { lease: LeaseRow; onDone: ()
         <Field label="Продлить на, мес." htmlFor="ex-m" error={fieldErrors.months}>
           <Input id="ex-m" type="number" inputMode="numeric" min={1} value={months} onChange={(e) => setMonths(e.target.value)} />
         </Field>
-        <Field label="Per Diem, $/сут." htmlFor="ex-rate" error={fieldErrors.newDailyRateUsd}>
-          <Input id="ex-rate" type="number" inputMode="decimal" step="0.05" value={rate} onChange={(e) => setRate(e.target.value)} />
-        </Field>
+        <p className="self-end pb-2 text-xs text-slate-500">
+          Per Diem остаётся {formatUsd(lease.dailyRateUsd, 2)}/сут. Новая ставка — новым договором.
+        </p>
       </div>
       {newEnd && (
         <p className="rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-900 ring-1 ring-indigo-100">
@@ -211,7 +210,7 @@ export function ExtendLeaseForm({ lease, onDone }: { lease: LeaseRow; onDone: ()
 export function OffHireForm({ lease, onDone }: { lease: LeaseRow; onDone: () => void }) {
   const onHire = lease.items.filter((i) => !i.offHireDate);
   const [itemIds, setItemIds] = useState<string[]>(onHire.map((i) => i.id));
-  const [returnDate, setReturnDate] = useState(toDateInput(new Date()));
+  const [returnDate, setReturnDate] = useState(toLocalDateInput());
   const [returnLocode, setReturnLocode] = useState(lease.allowedReturnLocodes[0] ?? "");
   const [terminal, setTerminal] = useState(terminalsOf(lease.allowedReturnLocodes[0] ?? "")[0] ?? "");
   const [condition, setCondition] = useState<"SOUND" | "DAMAGED">("SOUND");
@@ -241,7 +240,7 @@ export function OffHireForm({ lease, onDone }: { lease: LeaseRow; onDone: () => 
       </fieldset>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Дата Off-Hire" htmlFor="oh-date" error={fieldErrors.returnDate}>
-          <Input id="oh-date" type="date" value={returnDate} max={toDateInput(new Date())} onChange={(e) => setReturnDate(e.target.value)} />
+          <Input id="oh-date" type="date" value={returnDate} max={toLocalDateInput()} onChange={(e) => setReturnDate(e.target.value)} />
         </Field>
         <Field label="Регион возврата" htmlFor="oh-loc" error={fieldErrors.returnLocode} hint="Только разрешённые договором">
           <Select id="oh-loc" value={returnLocode} onChange={(e) => { setReturnLocode(e.target.value); setTerminal(terminalsOf(e.target.value)[0] ?? ""); }}>

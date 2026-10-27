@@ -119,12 +119,12 @@ export function OneWayBoard({ trips, issuable, focusId }: OneWayBoardProps) {
         </div>
         <div className="flex gap-2">
           <div className="relative flex-1 2xl:w-72">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" aria-hidden />
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" aria-hidden />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Номер, контрагент, заявка" className="pl-9" aria-label="Поиск рейса" />
           </div>
           <ExportCsvButton rows={visible} columns={ONE_WAY_CSV_COLUMNS} filePrefix={`fms-one-way-${tab}`} />
           <Button className="h-11 lg:h-10" onClick={() => setNewOpen(true)}>
-            <Plus /> <span className="hidden sm:inline">Выдать в One-Way</span>
+            <Plus /> <span className="sr-only sm:not-sr-only">Выдать в One-Way</span>
           </Button>
         </div>
       </div>
@@ -155,7 +155,7 @@ export function OneWayBoard({ trips, issuable, focusId }: OneWayBoardProps) {
                   <tr key={t.id} className={cn("cursor-pointer hover:bg-slate-50/80", t.id === focusId && "bg-indigo-50/50", t.timing.status === "OVERDUE" && "bg-rose-50/40")} onClick={() => setDetailId(t.id)}>
                     <td className="px-4 py-3">
                       <BicCode code={t.bicCode} />
-                      <p className="font-mono text-xs text-slate-400">{t.sizeType}</p>
+                      <p className="font-mono text-xs text-slate-500">{t.sizeType}</p>
                     </td>
                     <td className="max-w-52 px-3 py-3">
                       <p className="truncate font-medium text-slate-900">{t.counterpartyName}</p>
@@ -202,7 +202,7 @@ export function OneWayBoard({ trips, issuable, focusId }: OneWayBoardProps) {
                     <p className="mt-1.5 truncate text-sm font-medium text-slate-900">{t.counterpartyName}</p>
                     <div className="mt-1 flex items-center justify-between gap-2">
                       <RouteLabel from={t.pickupLocode} to={t.dropoffLocode} />
-                      <span className="font-mono text-xs text-slate-400">{t.bookingRef}</span>
+                      <span className="font-mono text-xs text-slate-500">{t.bookingRef}</span>
                     </div>
                     <div className="mt-3">
                       <FreeDaysMeter trip={t} />
@@ -258,7 +258,7 @@ export function OneWayBoard({ trips, issuable, focusId }: OneWayBoardProps) {
 }
 
 function SummaryTile({ label, value, tone = "slate", icon, onClick, active }: { label: string; value: number | string; tone?: "slate" | "amber" | "rose"; icon?: React.ReactNode; onClick: () => void; active: boolean }) {
-  const tones = { slate: "text-slate-900", amber: "text-amber-600", rose: "text-rose-600" };
+  const tones = { slate: "text-slate-900", amber: "text-amber-700", rose: "text-rose-600" };
   return (
     <button type="button" onClick={onClick} className={cn("rounded-xl border bg-white p-3 text-left shadow-sm transition hover:border-slate-300 sm:p-4", active ? "border-slate-900 ring-1 ring-slate-900" : "border-slate-200")}>
       <span className={cn("flex items-center gap-1.5 text-xs text-slate-500 [&_svg]:size-3.5", tones[tone])}>
@@ -274,7 +274,7 @@ function RouteLabel({ from, to }: { from: string; to: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-sm">
       <span className="font-medium text-slate-700">{locodeCity(from)}</span>
-      <ArrowRight className="size-3.5 text-slate-400" />
+      <ArrowRight className="size-3.5 text-slate-500" />
       <span className="font-medium text-slate-900">{locodeCity(to)}</span>
     </span>
   );
@@ -297,7 +297,7 @@ function FreeDaysMeter({ trip, showDetention = true }: { trip: TripRow; showDete
   return (
     <div>
       <div className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">
-        <span className={cn("font-semibold whitespace-nowrap", isOverdue ? "text-rose-600" : timing.isHot ? "text-amber-600" : "text-slate-700")}>
+        <span className={cn("font-semibold whitespace-nowrap", isOverdue ? "text-rose-600" : timing.isHot ? "text-amber-700" : "text-slate-700")}>
           {isOverdue ? (
             <>
               Просрочка {formatDays(timing.overdueDays)}
@@ -307,9 +307,9 @@ function FreeDaysMeter({ trip, showDetention = true }: { trip: TripRow; showDete
             `Осталось ${formatDays(timing.daysLeft ?? 0)}`
           )}
         </span>
-        <span className="font-mono text-slate-400">{trip.freeDays} св.</span>
+        <span className="font-mono text-slate-500">{trip.freeDays} св.</span>
       </div>
-      <Progress value={timing.freeDaysUsedRatio} tone={isOverdue ? "rose" : timing.isHot ? "amber" : "indigo"} />
+      <Progress label="Использовано свободных дней" value={timing.freeDaysUsedRatio} tone={isOverdue ? "rose" : timing.isHot ? "amber" : "indigo"} />
     </div>
   );
 }
@@ -325,7 +325,8 @@ function ReleaseLink({ tripId, compact = false }: { tripId: string; compact?: bo
       className={buttonClasses("outline", compact ? "sm" : "lg", compact ? "px-2" : "shrink-0")}
     >
       <Printer />
-      <span className={compact ? "sr-only" : "hidden xs:inline"}>Релиз / Памятка</span>
+      {/* На узком телефоне и в двухколоночной сетке планшета — только иконка (подпись остаётся для скринридера). */}
+      <span className={compact ? "sr-only" : "sr-only xs:not-sr-only md:sr-only"}>Релиз / Памятка</span>
     </a>
   );
 }
@@ -334,15 +335,16 @@ function TripAction({ trip, onGateIn, onResolve, block = false }: { trip: TripRo
   const s = trip.timing.status;
   if (s === "ACTIVE" || s === "OVERDUE") {
     return (
-      <Button size={block ? "lg" : "sm"} variant={s === "OVERDUE" ? "destructive" : "success"} className={cn(block && "w-full")} onClick={() => onGateIn(trip.id)}>
-        <PackageCheck /> {block ? "Зафиксировать Gate-In" : "Gate-In"}
+      <Button size={block ? "lg" : "sm"} variant={s === "OVERDUE" ? "destructive" : "success"} className={cn(block && "w-full min-w-0")} onClick={() => onGateIn(trip.id)}>
+        {/* В двухколоночной сетке планшета (md…xl) полная подпись не помещается в карточку — показываем короткую. */}
+        <PackageCheck /> <span className="truncate">{block && <span className="md:hidden">Зафиксировать </span>}Gate-In</span>
       </Button>
     );
   }
   if (s === "DISPUTE") {
     return (
-      <Button size={block ? "lg" : "sm"} variant="warning" className={cn(block && "w-full")} onClick={() => onResolve(trip.id)}>
-        <Gavel /> {block ? "Закрыть претензию" : "Претензия"}
+      <Button size={block ? "lg" : "sm"} variant="warning" className={cn(block && "w-full min-w-0")} onClick={() => onResolve(trip.id)}>
+        <Gavel /> <span className="truncate">{block ? <><span className="md:hidden">Закрыть претензию</span><span className="hidden md:inline">Претензия</span></> : "Претензия"}</span>
       </Button>
     );
   }

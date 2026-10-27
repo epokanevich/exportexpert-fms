@@ -2,14 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth/dal";
+import { isDemoMode } from "@/lib/demo-mode";
 import { seedDatabase } from "@/lib/seed/seed-database";
-import { serverError } from "./helpers";
+import { authorize, serverError } from "./helpers";
 import type { ActionResult } from "./types";
 
 export async function resetDemoDataAction(): Promise<ActionResult> {
-  const session = await requireSession();
-  if (session.role !== "ADMIN") return { ok: false, error: "Сброс данных доступен только администратору" };
+  const auth = await authorize("demo:reset");
+  if (!auth.ok) return { ok: false, error: "Сброс данных доступен только администратору" };
+  // Сброс стирает всю базу — на боевом стенде (DEMO_MODE=false) он недоступен даже администратору.
+  if (!isDemoMode()) return { ok: false, error: "Сброс демо-данных отключён: стенд работает не в демо-режиме" };
   try {
     const summary = await seedDatabase(prisma);
     revalidatePath("/", "layout");

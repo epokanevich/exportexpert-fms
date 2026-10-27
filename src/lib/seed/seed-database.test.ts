@@ -61,6 +61,24 @@ describe("seedDatabase (batched)", () => {
     expect(written.leaseItem.every((i) => containerIds.has(i.containerId as string) && leaseIds.has(i.leaseId as string))).toBe(true);
   });
 
+  test("does not pre-book rent for units still on hire (Off-Hire books it once)", async () => {
+    const { prisma, written } = createFakePrisma();
+    await seedDatabase(prisma, new Date("2026-10-26T12:00:00.000Z"));
+
+    const onHire = new Set(written.leaseItem.filter((i) => i.offHireDate === null).map((i) => i.containerId as string));
+    const onHireUnits = written.container.filter((c) => onHire.has(c.id as string));
+    expect(onHireUnits.length).toBeGreaterThan(0);
+    // Аренда на руках ещё не выставлена: Off-Hire начислит её целиком. Значит, в выручке сида её быть не должно —
+    // выручка единицы на руках = сумма доходных событий журнала (комиссии One-Way, маржа рейсов, закрытые аренды).
+    const REVENUE_EVENTS = new Set(["ONE_WAY_OUT", "ONE_WAY_IN", "GATE_IN", "LEASE_OFF_HIRE"]);
+    for (const unit of onHireUnits) {
+      const booked = written.containerEvent
+        .filter((e) => e.containerId === unit.id && REVENUE_EVENTS.has(e.type as string))
+        .reduce((sum, e) => sum + ((e.amountUsd as number | null) ?? 0), 0);
+      expect(unit.totalRevenueUsd, String(unit.bicCode)).toBeCloseTo(booked, 2);
+    }
+  });
+
   test("keeps the demo scenarios: 8 active One-Way, one open dispute, 4 active leases", async () => {
     const { prisma, written } = createFakePrisma();
     await seedDatabase(prisma, new Date("2026-10-26T12:00:00.000Z"));
